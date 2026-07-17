@@ -56,7 +56,17 @@ and steps through an SGF game record.
 
 - `size` — board size, e.g. `9`, `13`, `19` (default `19`); ignored
   once an `sgf` loads (its `SZ` property wins)
-- `coordinates` — set to `"false"` to hide the A–T / 1–N labels
+- `coordinates` — which sides get labels: unset/`"true"` (all four,
+  default), `"false"` (none), or a space/comma-separated list of
+  `top`/`bottom`/`left`/`right`, e.g. `coordinates="top left"`
+- `coordinates-font` — CSS font-family for the labels
+  (default `"system-ui, sans-serif"`)
+- `coordinates-font-size` — label size in board units, i.e. the same
+  scale as the grid (1 unit = 1 cell; default `0.32`) — not real CSS
+  pixels, since it's set inside the board's own SVG coordinate system
+- `coordinates-gap` — label distance from the grid edge, in board units
+  (default `0.5`, centered in the fixed 1-unit margin reserved for
+  labels; values much above ~1 will render outside the visible board)
 - `interactive` — set to `"false"` to disable clicking/hover
 - `sgf` — a URL to fetch and parse; on success, resets the board to the
   SGF's root position (move 0) and enables the navigation API below
@@ -72,6 +82,8 @@ and steps through an SGF game record.
   letterboxed within it).
 - `background-image` — image URL to render behind the grid, replacing
   the default wood gradient.
+- `keyboard-shortcuts` — set to `"false"` to disable arrow-key SGF
+  navigation (see "Keyboard navigation" below).
 
 ### Properties & methods
 
@@ -89,6 +101,33 @@ and steps through an SGF game record.
 - `board.goToMove(index)` — jump to an arbitrary position (clamped to
   `[0, moveCount]`); implemented by replaying from the root each call,
   which is how "previous" works without a separate undo mechanism
+- `board.keyBindings` — get/set the key-to-action map (see below)
+
+### Keyboard navigation
+
+With an `sgf` loaded, ArrowRight/ArrowLeft call `nextMove()`/
+`previousMove()` whenever focus is anywhere inside the nearest
+`go-board-container` ancestor of the `<go-board>` — or inside the
+`<go-board>` itself, if it isn't wrapped in a container. This is a
+live focus check on every keydown (via `event.composedPath()`), not a
+one-time binding, so it keeps working if focus moves between the
+board, `<go-board-controls>` buttons, or any other element you add
+inside the container.
+
+Remap the keys with the `keyBindings` property (a plain object, not an
+attribute — there's no declarative form):
+
+```js
+const board = document.querySelector("go-board")
+board.keyBindings = { next: "j", previous: "k" }        // replace
+board.keyBindings = { next: ["ArrowRight", "l"] }        // multiple keys, one action
+// `previous` above keeps its current binding — the setter only
+// touches the actions you mention, so partial remaps don't clobber
+// the rest.
+```
+
+Set `keyboard-shortcuts="false"` on `<go-board>` to disable this
+entirely.
 
 ### Events
 
@@ -120,11 +159,58 @@ Attributes: `board` (optional, see "Component architecture" above).
 
 ## `<go-board-controls>`
 
-Previous / Next / Play all / Restart buttons plus a "Move X / Y"
-counter, driving its `<go-board>`'s navigation API
-(`nextMove`/`previousMove`/`goToMove`). "Play all" steps forward on a
-120ms interval until the main line ends. All buttons are disabled when
-no `sgf` is loaded (`moveCount === 0`).
+Drives its `<go-board>`'s navigation API (`nextMove`/`previousMove`/
+`goToMove`) and play-all auto-advance (a 120ms interval until the main
+line ends). It ships a default Previous/Next/Play all/Restart button
+UI, but it's a **wrapper**, not a fixed widget: place your own markup
+inside it and that replaces the default UI entirely — this uses native
+`<slot>` fallback-content semantics (the default buttons are the
+`<slot>`'s fallback content, which stops rendering the moment the slot
+has any assigned children), so there's no configuration flag to
+toggle, just put elements inside it.
+
+Tag your elements so `<go-board-controls>` knows what they're for:
+
+- `data-go-action="first" | "back-10" | "previous" | "next" |
+  "forward-10" | "last" | "play-all" | "restart"` on any clickable
+  element (or an ancestor of one — it checks `event.composedPath()`)
+  wires it to that action. `back-10`/`forward-10` jump 10 moves via
+  `goToMove`; `first`/`last` jump to the start/end; any action other
+  than `play-all` stops auto-play first if it's running.
+- `data-go-counter` on any element fills its text with the move
+  position. Give the attribute a value with `{index}`/`{count}`
+  placeholders for a custom format (e.g.
+  `data-go-counter="{index} of {count}"`); an empty/bare attribute
+  defaults to `"Move {index} / {count}"`.
+
+Tagged action elements get `data-go-disabled` toggled when their
+action is currently unavailable (style or hide via that attribute
+selector — arbitrary elements, not just `<button>`, can be tagged, so
+this doesn't rely on the native `disabled` property, though that's
+also set when the element supports it). The `play-all` element
+additionally gets `data-go-playing` toggled while auto-play is
+running, for custom markup to react to (CSS, or your own
+`MutationObserver`).
+
+`index.html` has a full worked example: icon-button first/back-10/
+previous/play-all/next/forward-10/last controls (SVG chevrons, no
+text), styled entirely in the page's own `<style>` block — none of
+that layout or theming lives in the library. Minimal version:
+
+```html
+<go-board-controls>
+  <div class="my-controls">
+    <button data-go-action="previous">⏮</button>
+    <button data-go-action="next">⏭</button>
+    <button data-go-action="play-all">▶</button>
+    <span data-go-counter="{index} / {count}"></span>
+  </div>
+</go-board-controls>
+<style>
+  .my-controls button[data-go-disabled] { opacity: 0.3; }
+  .my-controls button[data-go-playing] { color: red; }
+</style>
+```
 
 Attributes: `board` (optional, see "Component architecture" above).
 
@@ -204,8 +290,12 @@ images, and board background live in `public/assets/`.
 Implemented: board rendering, stone placement, captures, suicide
 prevention, simple ko, passing/game-end detection, SGF parsing,
 SGF loading/navigation via `<go-board>`, custom stone and board-background
-image theming, configurable board size (`width`/`height`), the
-container/metadata/controls component split.
+image theming, configurable board size (`width`/`height`), configurable
+coordinates (sides/font/font-size/gap), the container/metadata/controls
+component split, configurable-binding keyboard navigation, and a fully
+overridable `<go-board-controls>` (tag your own markup with
+`data-go-action`/`data-go-counter`; first/back-10/previous/next/
+forward-10/last/play-all/restart actions available).
 
 Not yet implemented: scoring (territory counting), positional superko,
 handicap stones, SGF variation navigation/export, undo for

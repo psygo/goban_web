@@ -14,6 +14,13 @@ function cssLength(value: string): string {
 // Skips "I" per Go coordinate convention.
 const COLUMN_LETTERS = "ABCDEFGHJKLMNOPQRSTUVWXYZ";
 
+export type CoordinateSide = "top" | "bottom" | "left" | "right";
+const ALL_COORDINATE_SIDES: CoordinateSide[] = ["top", "bottom", "left", "right"];
+
+const DEFAULT_COORDS_FONT_FAMILY = "system-ui, sans-serif";
+const DEFAULT_COORDS_FONT_SIZE = "0.32";
+const DEFAULT_COORDS_GAP = 0.5;
+
 const PADDING = 1;
 const STONE_RADIUS = 0.475;
 const STAR_RADIUS = 0.09;
@@ -72,13 +79,34 @@ export interface NavigateEventDetail {
   moveCount: number;
 }
 
+export type GoBoardKeyAction = "next" | "previous";
+export type GoBoardKeyBindings = Partial<Record<GoBoardKeyAction, string | string[]>>;
+
+const DEFAULT_KEY_BINDINGS: Record<GoBoardKeyAction, string[]> = {
+  next: ["ArrowRight"],
+  previous: ["ArrowLeft"],
+};
+
+function normalizeKeyBinding(value: string | string[] | undefined): string[] | undefined {
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value : [value];
+}
+
 /**
  * `<go-board>` — an interactive Go board Web Component with an SVG,
  * Sabaki-inspired rendering and a self-contained rules engine.
  *
  * Attributes:
  *   - `size` (9 | 13 | 19 | any positive integer, default 19)
- *   - `coordinates` (boolean, default present)
+ *   - `coordinates` — which sides get labels: unset/`"true"` (all four,
+ *     default), `"false"` (none), or a space/comma-separated list of
+ *     `top`/`bottom`/`left`/`right`, e.g. `coordinates="top left"`
+ *   - `coordinates-font` — CSS font-family for the labels
+ *     (default `"system-ui, sans-serif"`)
+ *   - `coordinates-font-size` — label size in board units (same scale as
+ *     the grid: 1 unit = 1 cell; default `0.32`)
+ *   - `coordinates-gap` — label distance from the grid edge, in board
+ *     units (default `0.5`, i.e. centered in the fixed 1-unit margin)
  *   - `interactive` (boolean, default present)
  *   - `sgf` (URL to fetch and parse; drives the board via the navigation API)
  *   - `black-stone` / `white-stone` (image URL to render stones with,
@@ -87,6 +115,13 @@ export interface NavigateEventDetail {
  *     Defaults to 100% width with a 1:1 aspect ratio when unset)
  *   - `background-image` (image URL to render behind the grid, instead of
  *     the default wood gradient)
+ *   - `keyboard-shortcuts` (boolean, default present) — set to `"false"` to
+ *     disable arrow-key SGF navigation entirely
+ *
+ * Keyboard navigation: with an `sgf` loaded, ArrowRight/ArrowLeft step
+ * `nextMove()`/`previousMove()` whenever focus is anywhere inside the
+ * nearest `go-board-container` ancestor (or inside this element itself, if
+ * there is none). Remap via the `keyBindings` property.
  *
  * Events:
  *   - `move` — fired after a legal move, `detail: MoveEventDetail`
@@ -109,6 +144,9 @@ export class GoBoardElement extends HTMLElement {
       "width",
       "height",
       "background-image",
+      "coordinates-font",
+      "coordinates-font-size",
+      "coordinates-gap",
     ];
   }
 
@@ -122,6 +160,10 @@ export class GoBoardElement extends HTMLElement {
   private _sgfMainLine: SGFNode[] | null = null;
   private _moveIndex = 0;
   private sgfLoadToken = 0;
+  private _keyBindings: Record<GoBoardKeyAction, string[]> = {
+    next: [...DEFAULT_KEY_BINDINGS.next],
+    previous: [...DEFAULT_KEY_BINDINGS.previous],
+  };
 
   constructor() {
     super();
@@ -131,17 +173,20 @@ export class GoBoardElement extends HTMLElement {
 
   connectedCallback(): void {
     this.applyHostSize();
+    this.applyCoordinateStyle();
     this.buildSvg();
     this.render();
     this.svg.addEventListener("click", this.handleClick);
     this.svg.addEventListener("mousemove", this.handlePointerMove);
     this.svg.addEventListener("mouseleave", this.handlePointerLeave);
+    document.addEventListener("keydown", this.handleKeyDown);
   }
 
   disconnectedCallback(): void {
     this.svg.removeEventListener("click", this.handleClick);
     this.svg.removeEventListener("mousemove", this.handlePointerMove);
     this.svg.removeEventListener("mouseleave", this.handlePointerLeave);
+    document.removeEventListener("keydown", this.handleKeyDown);
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, newValue: string | null): void {
@@ -163,7 +208,10 @@ export class GoBoardElement extends HTMLElement {
     } else if (name === "width" || name === "height") {
       this.applyHostSize();
       return;
-    } else if (name === "background-image") {
+    } else if (name === "coordinates-font" || name === "coordinates-font-size") {
+      this.applyCoordinateStyle();
+      return;
+    } else if (name === "background-image" || name === "coordinates" || name === "coordinates-gap") {
       this.buildSvg();
     }
     this.render();
@@ -193,13 +241,65 @@ export class GoBoardElement extends HTMLElement {
     return !this.hasAttribute("interactive") || this.getAttribute("interactive") !== "false";
   }
 
+  get keyboardShortcutsEnabled(): boolean {
+    return (
+      !this.hasAttribute("keyboard-shortcuts") || this.getAttribute("keyboard-shortcuts") !== "false"
+    );
+  }
+
+  /** Current key-to-action bindings for arrow-key SGF navigation. */
+  get keyBindings(): Readonly<Record<GoBoardKeyAction, string[]>> {
+    return this._keyBindings;
+  }
+
+  /**
+   * Remaps which keys trigger `nextMove()`/`previousMove()`. Only the
+   * actions present in `bindings` are changed; others keep their current
+   * binding. Pass a single key or an array of alternatives per action.
+   */
+  set keyBindings(bindings: GoBoardKeyBindings) {
+    const next = normalizeKeyBinding(bindings.next);
+    const previous = normalizeKeyBinding(bindings.previous);
+    this._keyBindings = {
+      next: next ?? this._keyBindings.next,
+      previous: previous ?? this._keyBindings.previous,
+    };
+  }
+
   private get sizeAttr(): number {
     const value = Number(this.getAttribute("size"));
     return Number.isInteger(value) && value > 1 ? value : 19;
   }
 
-  private get showCoordinates(): boolean {
-    return !this.hasAttribute("coordinates") || this.getAttribute("coordinates") !== "false";
+  /** Which sides currently get coordinate labels, per the `coordinates` attribute. */
+  private get coordinateSides(): Set<CoordinateSide> {
+    if (!this.hasAttribute("coordinates")) return new Set(ALL_COORDINATE_SIDES);
+    const value = (this.getAttribute("coordinates") ?? "").trim().toLowerCase();
+    if (value === "false") return new Set();
+    if (value === "" || value === "true") return new Set(ALL_COORDINATE_SIDES);
+    const tokens = value.split(/[\s,]+/).filter(Boolean);
+    return new Set(tokens.filter((token): token is CoordinateSide => (ALL_COORDINATE_SIDES as string[]).includes(token)));
+  }
+
+  /** Label distance from the grid edge, in board units (see `coordinates-gap`). */
+  private get coordinatesGap(): number {
+    const value = Number(this.getAttribute("coordinates-gap"));
+    return Number.isFinite(value) && value >= 0 ? value : DEFAULT_COORDS_GAP;
+  }
+
+  /**
+   * Reflects `coordinates-font`/`coordinates-font-size` onto CSS custom
+   * properties on the host, consumed by the shadow stylesheet. Using
+   * custom-property substitution (rather than interpolating the raw
+   * attribute string into the `<style>` text) means an attacker-controlled
+   * value can't break out into new CSS rules — the browser only ever
+   * resolves it as a single property value.
+   */
+  private applyCoordinateStyle(): void {
+    const fontFamily = this.getAttribute("coordinates-font") || DEFAULT_COORDS_FONT_FAMILY;
+    const fontSize = this.getAttribute("coordinates-font-size") || DEFAULT_COORDS_FONT_SIZE;
+    this.style.setProperty("--go-coords-font-family", fontFamily);
+    this.style.setProperty("--go-coords-font-size", `${fontSize}px`);
   }
 
   /**
@@ -382,6 +482,20 @@ export class GoBoardElement extends HTMLElement {
     }
   };
 
+  private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (!this.keyboardShortcutsEnabled) return;
+    const scope = this.closest("go-board-container") ?? this;
+    if (!event.composedPath().includes(scope)) return;
+
+    if (this._keyBindings.next.includes(event.key)) {
+      event.preventDefault();
+      this.nextMove();
+    } else if (this._keyBindings.previous.includes(event.key)) {
+      event.preventDefault();
+      this.previousMove();
+    }
+  };
+
   private vertexFromEvent(event: MouseEvent): Vertex | null {
     const point = this.svg.createSVGPoint();
     point.x = event.clientX;
@@ -414,7 +528,7 @@ export class GoBoardElement extends HTMLElement {
       .map(([x, y]) => `<circle class="star" cx="${PADDING + x}" cy="${PADDING + y}" r="${STAR_RADIUS}" />`)
       .join("");
 
-    const coordMarkup = this.showCoordinates ? this.buildCoordinateMarkup(size, extent) : "";
+    const coordMarkup = this.buildCoordinateMarkup(size, extent);
 
     this.shadowRoot!.innerHTML = `
       <style>${STYLES}</style>
@@ -465,24 +579,31 @@ export class GoBoardElement extends HTMLElement {
   }
 
   private buildCoordinateMarkup(size: number, extent: number): string {
-    const labelOffset = PADDING / 2;
-    const columns: string[] = [];
-    const rows: string[] = [];
-    for (let x = 0; x < size; x++) {
-      const letter = COLUMN_LETTERS[x] ?? "?";
-      columns.push(
-        `<text x="${PADDING + x}" y="${labelOffset}">${letter}</text>`,
-        `<text x="${PADDING + x}" y="${extent - labelOffset}">${letter}</text>`,
-      );
+    const sides = this.coordinateSides;
+    if (sides.size === 0) return "";
+
+    const gap = this.coordinatesGap;
+    const topY = PADDING - gap;
+    const bottomY = extent - PADDING + gap;
+    const leftX = PADDING - gap;
+    const rightX = extent - PADDING + gap;
+
+    const labels: string[] = [];
+    if (sides.has("top") || sides.has("bottom")) {
+      for (let x = 0; x < size; x++) {
+        const letter = COLUMN_LETTERS[x] ?? "?";
+        if (sides.has("top")) labels.push(`<text x="${PADDING + x}" y="${topY}">${letter}</text>`);
+        if (sides.has("bottom")) labels.push(`<text x="${PADDING + x}" y="${bottomY}">${letter}</text>`);
+      }
     }
-    for (let y = 0; y < size; y++) {
-      const label = size - y;
-      rows.push(
-        `<text x="${labelOffset}" y="${PADDING + y}">${label}</text>`,
-        `<text x="${extent - labelOffset}" y="${PADDING + y}">${label}</text>`,
-      );
+    if (sides.has("left") || sides.has("right")) {
+      for (let y = 0; y < size; y++) {
+        const label = size - y;
+        if (sides.has("left")) labels.push(`<text x="${leftX}" y="${PADDING + y}">${label}</text>`);
+        if (sides.has("right")) labels.push(`<text x="${rightX}" y="${PADDING + y}">${label}</text>`);
+      }
     }
-    return `<g class="coordinates">${columns.join("")}${rows.join("")}</g>`;
+    return `<g class="coordinates">${labels.join("")}</g>`;
   }
 
   private render(): void {
@@ -566,8 +687,8 @@ const STYLES = `
     pointer-events: none;
   }
   .coordinates text {
-    font-family: system-ui, sans-serif;
-    font-size: 0.32px;
+    font-family: var(--go-coords-font-family, system-ui, sans-serif);
+    font-size: var(--go-coords-font-size, 0.32px);
     fill: #453017;
     text-anchor: middle;
     dominant-baseline: middle;

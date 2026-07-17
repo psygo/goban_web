@@ -16,6 +16,9 @@ export type { SGFGameTree, SGFNode, SGFProperties } from "./core/sgf";
 // upgrades already-parsed elements immediately, in registration order.
 export { GoBoardElement } from "./elements/go-board-element";
 export type {
+  CoordinateSide,
+  GoBoardKeyAction,
+  GoBoardKeyBindings,
   IllegalMoveEventDetail,
   MoveEventDetail,
   NavigateEventDetail,

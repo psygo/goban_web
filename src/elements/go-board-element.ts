@@ -11,6 +11,23 @@ function cssLength(value: string): string {
   return /^\d+(\.\d+)?$/.test(value) ? `${value}px` : value;
 }
 
+/**
+ * Resolves any valid CSS length (px, pt, rem, %, ...) to an absolute pixel
+ * number, via a detached probe element the browser's own CSS engine
+ * resolves — avoids reimplementing unit-conversion math ourselves.
+ */
+function cssLengthToPixels(value: string): number {
+  const probe = document.createElement("div");
+  probe.style.position = "absolute";
+  probe.style.visibility = "hidden";
+  probe.style.pointerEvents = "none";
+  probe.style.fontSize = cssLength(value);
+  document.body.appendChild(probe);
+  const resolved = parseFloat(getComputedStyle(probe).fontSize);
+  probe.remove();
+  return Number.isFinite(resolved) ? resolved : 0;
+}
+
 // Skips "I" per Go coordinate convention.
 const COLUMN_LETTERS = "ABCDEFGHJKLMNOPQRSTUVWXYZ";
 
@@ -21,9 +38,28 @@ const DEFAULT_COORDS_FONT_FAMILY = "system-ui, sans-serif";
 const DEFAULT_COORDS_FONT_SIZE = "0.32";
 const DEFAULT_COORDS_GAP = 0.5;
 
-const PADDING = 1;
+// Small, so the default look matches the pre-reservation-split appearance:
+// coordinate labels already carve out their own space (see `computeLayout`),
+// this just adds a touch of breathing room beyond them.
+const DEFAULT_PADDING = 0.2;
 const STONE_RADIUS = 0.475;
 const STAR_RADIUS = 0.09;
+// How far a cropped edge's grid lines overhang past the last visible
+// intersection, signaling "the board continues past what's shown" instead of
+// looking like a smaller full board.
+const CROP_BLEED = 0.4;
+
+interface BoardLayout {
+  size: number;
+  xStart: number;
+  xEnd: number;
+  yStart: number;
+  yEnd: number;
+  extentX: number;
+  extentY: number;
+  gridOffsetX: number;
+  gridOffsetY: number;
+}
 
 const STAR_POINTS: Record<number, [number, number][]> = {
   9: [
@@ -103,10 +139,27 @@ function normalizeKeyBinding(value: string | string[] | undefined): string[] | u
  *     `top`/`bottom`/`left`/`right`, e.g. `coordinates="top left"`
  *   - `coordinates-font` — CSS font-family for the labels
  *     (default `"system-ui, sans-serif"`)
- *   - `coordinates-font-size` — label size in board units (same scale as
- *     the grid: 1 unit = 1 cell; default `0.32`)
- *   - `coordinates-gap` — label distance from the grid edge, in board
- *     units (default `0.5`, i.e. centered in the fixed 1-unit margin)
+ *   - `coordinates-font-size` — real CSS length for the labels (bare
+ *     numbers are px, e.g. `"10"` or `"10pt"`; default matches the board's
+ *     own scale, about `0.32` of a grid cell). Converted internally to the
+ *     board's SVG unit space using the host's current rendered size, kept
+ *     in sync via a `ResizeObserver` as the board resizes.
+ *   - `coordinates-gap` — real CSS length for label distance from the grid
+ *     edge, converted the same way (default centers labels in the fixed
+ *     1-unit margin reserved for them)
+ *   - `padding` — real CSS length for the blank margin between the host's
+ *     outer edge and the grid/coordinates (coordinate labels get their own
+ *     reserved space automatically when shown, so this is purely extra
+ *     breathing room outside of them, always in addition to it — never a
+ *     substitute). Converted the same way as the two attributes above.
+ *   - `x-start` / `x-end` / `y-start` / `y-end` — crop the rendered board to
+ *     a sub-rectangle of vertices (inclusive, 0-indexed, same coordinate
+ *     space as `move`'s `detail.x`/`detail.y`). Defaults to the full board.
+ *     Cut edges (where the crop doesn't reach the true board edge) render
+ *     grid lines with a short overhang, signaling the board continues past
+ *     what's shown, and only show coordinate labels for the visible range.
+ *     The rules engine is unaffected — this only changes what's drawn and
+ *     clickable.
  *   - `interactive` (boolean, default present)
  *   - `sgf` (URL to fetch and parse; drives the board via the navigation API)
  *   - `black-stone` / `white-stone` (image URL to render stones with,
@@ -147,6 +200,11 @@ export class GoBoardElement extends HTMLElement {
       "coordinates-font",
       "coordinates-font-size",
       "coordinates-gap",
+      "padding",
+      "x-start",
+      "x-end",
+      "y-start",
+      "y-end",
     ];
   }
 
@@ -164,6 +222,7 @@ export class GoBoardElement extends HTMLElement {
     next: [...DEFAULT_KEY_BINDINGS.next],
     previous: [...DEFAULT_KEY_BINDINGS.previous],
   };
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor() {
     super();
@@ -176,17 +235,33 @@ export class GoBoardElement extends HTMLElement {
     this.applyCoordinateStyle();
     this.buildSvg();
     this.render();
-    this.svg.addEventListener("click", this.handleClick);
-    this.svg.addEventListener("mousemove", this.handlePointerMove);
-    this.svg.addEventListener("mouseleave", this.handlePointerLeave);
+    // Bound to the host, not `this.svg` — `buildSvg()` replaces the entire
+    // shadow DOM (including the `<svg>`) whenever padding/coordinates/crop
+    // attributes change, which would otherwise leave these listeners
+    // attached to a detached, stale element. `click`/`mousemove` are
+    // composed and bubble up through the shadow boundary to the host
+    // regardless of which `<svg>` is currently inside it; `mouseleave`
+    // doesn't bubble, but the svg fills the host's full box, so "left the
+    // host" and "left the svg" coincide.
+    this.addEventListener("click", this.handleClick);
+    this.addEventListener("mousemove", this.handlePointerMove);
+    this.addEventListener("mouseleave", this.handlePointerLeave);
     document.addEventListener("keydown", this.handleKeyDown);
+    // Re-derives coordinates-font-size/coordinates-gap (CSS units converted
+    // to board units) whenever the host's rendered size changes, and also
+    // fires once on observe() — which is what resolves them correctly after
+    // the very first connect, when layout may not have run yet.
+    this.resizeObserver = new ResizeObserver(this.handleResize);
+    this.resizeObserver.observe(this);
   }
 
   disconnectedCallback(): void {
-    this.svg.removeEventListener("click", this.handleClick);
-    this.svg.removeEventListener("mousemove", this.handlePointerMove);
-    this.svg.removeEventListener("mouseleave", this.handlePointerLeave);
+    this.removeEventListener("click", this.handleClick);
+    this.removeEventListener("mousemove", this.handlePointerMove);
+    this.removeEventListener("mouseleave", this.handlePointerLeave);
     document.removeEventListener("keydown", this.handleKeyDown);
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
   }
 
   attributeChangedCallback(name: string, _oldValue: string | null, newValue: string | null): void {
@@ -211,7 +286,17 @@ export class GoBoardElement extends HTMLElement {
     } else if (name === "coordinates-font" || name === "coordinates-font-size") {
       this.applyCoordinateStyle();
       return;
-    } else if (name === "background-image" || name === "coordinates" || name === "coordinates-gap") {
+    } else if (
+      name === "background-image" ||
+      name === "coordinates" ||
+      name === "coordinates-gap" ||
+      name === "padding" ||
+      name === "x-start" ||
+      name === "x-end" ||
+      name === "y-start" ||
+      name === "y-end"
+    ) {
+      this.applyHostSize();
       this.buildSvg();
     }
     this.render();
@@ -283,8 +368,78 @@ export class GoBoardElement extends HTMLElement {
 
   /** Label distance from the grid edge, in board units (see `coordinates-gap`). */
   private get coordinatesGap(): number {
-    const value = Number(this.getAttribute("coordinates-gap"));
-    return Number.isFinite(value) && value >= 0 ? value : DEFAULT_COORDS_GAP;
+    const attr = this.getAttribute("coordinates-gap");
+    if (!attr) return DEFAULT_COORDS_GAP;
+    return Math.max(0, this.cssLengthToBoardUnits(attr) ?? DEFAULT_COORDS_GAP);
+  }
+
+  /** Coordinate label font size, in board units (see `coordinates-font-size`). */
+  private get coordinatesFontSizeUnits(): number {
+    const attr = this.getAttribute("coordinates-font-size");
+    const fallback = Number(DEFAULT_COORDS_FONT_SIZE);
+    if (!attr) return fallback;
+    return Math.max(0, this.cssLengthToBoardUnits(attr) ?? fallback);
+  }
+
+  /**
+   * The blank margin between the host's outer edge and the grid/coordinates,
+   * in board units (see `padding`). Never negative — a "negative margin"
+   * would push content past the host's own edge, clipping it.
+   *
+   * Resolved against `DEFAULT_PADDING` rather than itself when converting
+   * CSS units — using the not-yet-resolved custom padding to compute the
+   * very extent that padding determines would be circular. This makes the
+   * conversion ratio a reasonable approximation (based on the default
+   * margin) rather than exact when a custom padding is set, which is fine
+   * in practice since padding is a coarse, rarely-tuned setting.
+   */
+  private get padding(): number {
+    const attr = this.getAttribute("padding");
+    if (!attr) return DEFAULT_PADDING;
+    return Math.max(0, this.cssLengthToBoardUnits(attr, DEFAULT_PADDING) ?? DEFAULT_PADDING);
+  }
+
+  /** Inclusive vertex range shown along an axis, per `x-start`/`x-end`/`y-start`/`y-end`. */
+  private cropRange(startAttr: string, endAttr: string): [number, number] {
+    const size = this._board.size;
+    const clamp = (attr: string | null, fallback: number): number => {
+      if (attr === null || attr === "") return fallback;
+      const value = Number(attr);
+      if (!Number.isInteger(value)) return fallback;
+      return Math.max(0, Math.min(value, size - 1));
+    };
+    const start = clamp(this.getAttribute(startAttr), 0);
+    const end = clamp(this.getAttribute(endAttr), size - 1);
+    return start <= end ? [start, end] : [end, start];
+  }
+
+  /**
+   * Resolves board size, crop range, padding, and coordinate space into the
+   * SVG geometry every rendering/hit-testing method needs. Coordinate labels
+   * (when shown) get their own reserved space *outside* the grid but
+   * *inside* `padding`'s margin — so `padding` is always, literally, the
+   * distance from the host's outer edge to the outermost thing drawn
+   * (labels if shown, the grid itself otherwise), never eaten into by them.
+   */
+  private computeLayout(): BoardLayout {
+    const size = this._board.size;
+    const [xStart, xEnd] = this.cropRange("x-start", "x-end");
+    const [yStart, yEnd] = this.cropRange("y-start", "y-end");
+    const padding = this.padding;
+    const reservation =
+      this.coordinateSides.size > 0 ? this.coordinatesGap + this.coordinatesFontSizeUnits : 0;
+    const margin = padding + reservation;
+    return {
+      size,
+      xStart,
+      xEnd,
+      yStart,
+      yEnd,
+      extentX: xEnd - xStart + margin * 2,
+      extentY: yEnd - yStart + margin * 2,
+      gridOffsetX: margin - xStart,
+      gridOffsetY: margin - yStart,
+    };
   }
 
   /**
@@ -297,29 +452,68 @@ export class GoBoardElement extends HTMLElement {
    */
   private applyCoordinateStyle(): void {
     const fontFamily = this.getAttribute("coordinates-font") || DEFAULT_COORDS_FONT_FAMILY;
-    const fontSize = this.getAttribute("coordinates-font-size") || DEFAULT_COORDS_FONT_SIZE;
     this.style.setProperty("--go-coords-font-family", fontFamily);
-    this.style.setProperty("--go-coords-font-size", `${fontSize}px`);
+
+    const fontSizeAttr = this.getAttribute("coordinates-font-size");
+    const units = fontSizeAttr
+      ? this.cssLengthToBoardUnits(fontSizeAttr)
+      : Number(DEFAULT_COORDS_FONT_SIZE);
+    if (units === null) return; // not laid out yet; the ResizeObserver's first callback retries
+    this.style.setProperty("--go-coords-font-size", `${units}px`);
+  }
+
+  /**
+   * Converts a real CSS length (as given to `coordinates-font-size` /
+   * `coordinates-gap`) into the board's own SVG user-unit space, using the
+   * host's current rendered size as the conversion ratio. Returns null if
+   * the host hasn't been laid out yet (rect is zero-sized) — callers should
+   * keep their previous/default value and rely on the ResizeObserver to
+   * call back once real layout is available.
+   */
+  private cssLengthToBoardUnits(value: string, paddingForExtent: number = this.padding): number | null {
+    const rect = this.getBoundingClientRect();
+    if (rect.width === 0) return null;
+    const pixels = cssLengthToPixels(value);
+    const [xStart, xEnd] = this.cropRange("x-start", "x-end");
+    const extent = xEnd - xStart + paddingForExtent * 2;
+    return pixels * (extent / rect.width);
   }
 
   /**
    * Reflects the `width`/`height` attributes onto inline host styles. With
-   * neither set, defaults to 100% width (the host's `aspect-ratio: 1/1`
-   * derives a square height). Setting just one derives the other to match
-   * it (a square board at that size) — computed here rather than left to
-   * CSS `aspect-ratio`, since a slotted flex child stretches its cross-axis
-   * ("auto" width) to fill the container regardless of aspect-ratio.
+   * neither set, defaults to 100% width with the height derived from the
+   * board's own aspect ratio (1:1 normally, but non-square once cropped via
+   * `x-start`/`x-end`/`y-start`/`y-end`) — computed here rather than left to
+   * the static `aspect-ratio: 1/1` stylesheet rule, both because it must
+   * track cropping and because a slotted flex child stretches its
+   * cross-axis ("auto" width) to fill the container regardless of
+   * aspect-ratio. Setting just one of `width`/`height` derives the other to
+   * match the board's own aspect ratio at that size.
    */
   private applyHostSize(): void {
     const widthAttr = this.getAttribute("width");
     const heightAttr = this.getAttribute("height");
+    const { extentX, extentY } = this.computeLayout();
     if (!widthAttr && !heightAttr) {
       this.style.width = "100%";
       this.style.height = "";
+      this.style.aspectRatio = `${extentX} / ${extentY}`;
       return;
     }
-    this.style.width = cssLength(widthAttr ?? heightAttr!);
-    this.style.height = cssLength(heightAttr ?? widthAttr!);
+    this.style.aspectRatio = "";
+    if (widthAttr && heightAttr) {
+      this.style.width = cssLength(widthAttr);
+      this.style.height = cssLength(heightAttr);
+      return;
+    }
+    const ratio = extentY / extentX;
+    if (widthAttr) {
+      this.style.width = cssLength(widthAttr);
+      this.style.height = `calc(${cssLength(widthAttr)} * ${ratio})`;
+    } else {
+      this.style.height = cssLength(heightAttr!);
+      this.style.width = `calc(${cssLength(heightAttr!)} * ${1 / ratio})`;
+    }
   }
 
   /** Plays a move for the current player at the given board coordinates. */
@@ -496,6 +690,19 @@ export class GoBoardElement extends HTMLElement {
     }
   };
 
+  private readonly handleResize = (): void => {
+    this.applyCoordinateStyle();
+    this.applyHostSize();
+    if (
+      this.hasAttribute("coordinates-gap") ||
+      this.hasAttribute("padding") ||
+      this.hasAttribute("coordinates-font-size")
+    ) {
+      this.buildSvg();
+      this.render();
+    }
+  };
+
   private vertexFromEvent(event: MouseEvent): Vertex | null {
     const point = this.svg.createSVGPoint();
     point.x = event.clientX;
@@ -503,36 +710,51 @@ export class GoBoardElement extends HTMLElement {
     const ctm = this.svg.getScreenCTM();
     if (!ctm) return null;
     const local = point.matrixTransform(ctm.inverse());
-    const x = Math.round(local.x - PADDING);
-    const y = Math.round(local.y - PADDING);
-    const size = this._board.size;
-    if (x < 0 || x >= size || y < 0 || y >= size) return null;
-    if (Math.hypot(local.x - PADDING - x, local.y - PADDING - y) > 0.5) return null;
+    const { xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = this.computeLayout();
+    const x = Math.round(local.x - gridOffsetX);
+    const y = Math.round(local.y - gridOffsetY);
+    if (x < xStart || x > xEnd || y < yStart || y > yEnd) return null;
+    if (Math.hypot(local.x - gridOffsetX - x, local.y - gridOffsetY - y) > 0.5) return null;
     return { x, y };
   }
 
   private buildSvg(): void {
-    const size = this._board.size;
-    const extent = size - 1 + PADDING * 2;
-    const stars = STAR_POINTS[size] ?? [];
+    const layout = this.computeLayout();
+    const { size, xStart, xEnd, yStart, yEnd, extentX, extentY, gridOffsetX, gridOffsetY } = layout;
+    const stars = (STAR_POINTS[size] ?? []).filter(
+      ([x, y]) => x >= xStart && x <= xEnd && y >= yStart && y <= yEnd,
+    );
+
+    const bleedLeft = xStart > 0 ? CROP_BLEED : 0;
+    const bleedRight = xEnd < size - 1 ? CROP_BLEED : 0;
+    const bleedTop = yStart > 0 ? CROP_BLEED : 0;
+    const bleedBottom = yEnd < size - 1 ? CROP_BLEED : 0;
 
     const gridLines: string[] = [];
-    for (let i = 0; i < size; i++) {
+    for (let y = yStart; y <= yEnd; y++) {
+      const svgY = gridOffsetY + y;
       gridLines.push(
-        `<line x1="${PADDING}" y1="${PADDING + i}" x2="${PADDING + size - 1}" y2="${PADDING + i}" />`,
-        `<line x1="${PADDING + i}" y1="${PADDING}" x2="${PADDING + i}" y2="${PADDING + size - 1}" />`,
+        `<line x1="${gridOffsetX + xStart - bleedLeft}" y1="${svgY}" x2="${gridOffsetX + xEnd + bleedRight}" y2="${svgY}" />`,
+      );
+    }
+    for (let x = xStart; x <= xEnd; x++) {
+      const svgX = gridOffsetX + x;
+      gridLines.push(
+        `<line x1="${svgX}" y1="${gridOffsetY + yStart - bleedTop}" x2="${svgX}" y2="${gridOffsetY + yEnd + bleedBottom}" />`,
       );
     }
 
     const starMarkup = stars
-      .map(([x, y]) => `<circle class="star" cx="${PADDING + x}" cy="${PADDING + y}" r="${STAR_RADIUS}" />`)
+      .map(
+        ([x, y]) => `<circle class="star" cx="${gridOffsetX + x}" cy="${gridOffsetY + y}" r="${STAR_RADIUS}" />`,
+      )
       .join("");
 
-    const coordMarkup = this.buildCoordinateMarkup(size, extent);
+    const coordMarkup = this.buildCoordinateMarkup(layout);
 
     this.shadowRoot!.innerHTML = `
       <style>${STYLES}</style>
-      <svg viewBox="0 0 ${extent} ${extent}" role="group" aria-label="Go board">
+      <svg viewBox="0 0 ${extentX} ${extentY}" role="group" aria-label="Go board">
         <defs>
           <radialGradient id="wood" cx="35%" cy="30%" r="75%">
             <stop offset="0%" stop-color="#f0c988" />
@@ -549,7 +771,7 @@ export class GoBoardElement extends HTMLElement {
             <stop offset="100%" stop-color="#c9c3b3" />
           </radialGradient>
         </defs>
-        <rect class="board-bg" x="0" y="0" width="${extent}" height="${extent}" fill="url(#wood)" />
+        <rect class="board-bg" x="0" y="0" width="${extentX}" height="${extentY}" fill="url(#wood)" />
         <g class="grid" stroke="#453017" stroke-width="0.035">${gridLines.join("")}</g>
         <g class="star-points" fill="#453017">${starMarkup}</g>
         ${coordMarkup}
@@ -569,8 +791,8 @@ export class GoBoardElement extends HTMLElement {
       const image = document.createElementNS(SVG_NS, "image");
       image.setAttribute("x", "0");
       image.setAttribute("y", "0");
-      image.setAttribute("width", String(extent));
-      image.setAttribute("height", String(extent));
+      image.setAttribute("width", String(extentX));
+      image.setAttribute("height", String(extentY));
       image.setAttribute("preserveAspectRatio", "xMidYMid slice");
       image.setAttribute("href", backgroundImage);
       image.setAttribute("class", "board-bg-image");
@@ -578,29 +800,32 @@ export class GoBoardElement extends HTMLElement {
     }
   }
 
-  private buildCoordinateMarkup(size: number, extent: number): string {
+  private buildCoordinateMarkup(layout: BoardLayout): string {
     const sides = this.coordinateSides;
     if (sides.size === 0) return "";
 
+    const { size, xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = layout;
     const gap = this.coordinatesGap;
-    const topY = PADDING - gap;
-    const bottomY = extent - PADDING + gap;
-    const leftX = PADDING - gap;
-    const rightX = extent - PADDING + gap;
+    const topY = gridOffsetY + yStart - gap;
+    const bottomY = gridOffsetY + yEnd + gap;
+    const leftX = gridOffsetX + xStart - gap;
+    const rightX = gridOffsetX + xEnd + gap;
 
     const labels: string[] = [];
     if (sides.has("top") || sides.has("bottom")) {
-      for (let x = 0; x < size; x++) {
+      for (let x = xStart; x <= xEnd; x++) {
         const letter = COLUMN_LETTERS[x] ?? "?";
-        if (sides.has("top")) labels.push(`<text x="${PADDING + x}" y="${topY}">${letter}</text>`);
-        if (sides.has("bottom")) labels.push(`<text x="${PADDING + x}" y="${bottomY}">${letter}</text>`);
+        const svgX = gridOffsetX + x;
+        if (sides.has("top")) labels.push(`<text x="${svgX}" y="${topY}">${letter}</text>`);
+        if (sides.has("bottom")) labels.push(`<text x="${svgX}" y="${bottomY}">${letter}</text>`);
       }
     }
     if (sides.has("left") || sides.has("right")) {
-      for (let y = 0; y < size; y++) {
+      for (let y = yStart; y <= yEnd; y++) {
         const label = size - y;
-        if (sides.has("left")) labels.push(`<text x="${leftX}" y="${PADDING + y}">${label}</text>`);
-        if (sides.has("right")) labels.push(`<text x="${rightX}" y="${PADDING + y}">${label}</text>`);
+        const svgY = gridOffsetY + y;
+        if (sides.has("left")) labels.push(`<text x="${leftX}" y="${svgY}">${label}</text>`);
+        if (sides.has("right")) labels.push(`<text x="${rightX}" y="${svgY}">${label}</text>`);
       }
     }
     return `<g class="coordinates">${labels.join("")}</g>`;
@@ -609,12 +834,12 @@ export class GoBoardElement extends HTMLElement {
   private render(): void {
     if (!this.stonesGroup) return;
     this.stonesGroup.replaceChildren();
-    const size = this._board.size;
-    for (let y = 0; y < size; y++) {
-      for (let x = 0; x < size; x++) {
+    const { xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = this.computeLayout();
+    for (let y = yStart; y <= yEnd; y++) {
+      for (let x = xStart; x <= xEnd; x++) {
         const color = this._board.get(x, y);
         if (color === Color.Empty) continue;
-        this.stonesGroup.appendChild(this.createStone(x, y, color));
+        this.stonesGroup.appendChild(this.createStone(x, y, color, gridOffsetX, gridOffsetY));
       }
     }
     this.updateGhostStone();
@@ -625,12 +850,12 @@ export class GoBoardElement extends HTMLElement {
     return this.getAttribute(attr) || null;
   }
 
-  private createStone(x: number, y: number, color: Color): SVGElement {
+  private createStone(x: number, y: number, color: Color, gridOffsetX: number, gridOffsetY: number): SVGElement {
     const imageUrl = this.stoneImageUrl(color);
     if (imageUrl) {
       const image = document.createElementNS(SVG_NS, "image");
-      image.setAttribute("x", String(PADDING + x - STONE_RADIUS));
-      image.setAttribute("y", String(PADDING + y - STONE_RADIUS));
+      image.setAttribute("x", String(gridOffsetX + x - STONE_RADIUS));
+      image.setAttribute("y", String(gridOffsetY + y - STONE_RADIUS));
       image.setAttribute("width", String(STONE_RADIUS * 2));
       image.setAttribute("height", String(STONE_RADIUS * 2));
       image.setAttribute("href", imageUrl);
@@ -638,8 +863,8 @@ export class GoBoardElement extends HTMLElement {
       return image;
     }
     const circle = document.createElementNS(SVG_NS, "circle");
-    circle.setAttribute("cx", String(PADDING + x));
-    circle.setAttribute("cy", String(PADDING + y));
+    circle.setAttribute("cx", String(gridOffsetX + x));
+    circle.setAttribute("cy", String(gridOffsetY + y));
     circle.setAttribute("r", String(STONE_RADIUS));
     circle.setAttribute("class", color === Color.Black ? "stone stone-black" : "stone stone-white");
     return circle;
@@ -659,8 +884,9 @@ export class GoBoardElement extends HTMLElement {
       return;
     }
 
-    this.ghostStone.setAttribute("cx", String(PADDING + vertex.x));
-    this.ghostStone.setAttribute("cy", String(PADDING + vertex.y));
+    const { gridOffsetX, gridOffsetY } = this.computeLayout();
+    this.ghostStone.setAttribute("cx", String(gridOffsetX + vertex.x));
+    this.ghostStone.setAttribute("cy", String(gridOffsetY + vertex.y));
     this.ghostStone.setAttribute(
       "fill",
       this._board.currentColor === Color.Black ? "#111111" : "#f5f2e9",

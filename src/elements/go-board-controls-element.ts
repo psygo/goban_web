@@ -15,25 +15,37 @@ const STYLES = `
   }
   .default-controls {
     display: flex;
-    flex-direction: column;
-    gap: 0.5rem;
+    align-items: center;
+    gap: 0.375rem;
   }
-  .counter {
+  .default-controls button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    border: none;
+    border-radius: 999px;
+    background: #3a3a3a;
+    color: #eee;
+    cursor: pointer;
+  }
+  .default-controls button:hover:not([data-go-disabled]) {
+    background: #4a4a4a;
+  }
+  .default-controls button[data-go-disabled] {
+    opacity: 0.3;
+    cursor: default;
+  }
+  .default-controls button[data-go-action="play-all"][data-go-playing] {
+    background: #7a3a3a;
+  }
+  .default-counter {
+    margin-left: 0.375rem;
     font-variant-numeric: tabular-nums;
     color: #bbb;
-    font-size: 0.9rem;
-  }
-  .buttons {
-    display: flex;
-    gap: 0.5rem;
-  }
-  button {
-    cursor: pointer;
-    padding: 0.5rem 1rem;
-  }
-  button:disabled {
-    cursor: default;
-    opacity: 0.5;
+    font-size: 0.85rem;
   }
 `;
 
@@ -78,13 +90,46 @@ export class GoBoardControlsElement extends HTMLElement {
         <style>${STYLES}</style>
         <slot>
           <div class="default-controls">
-            <div class="counter" ${COUNTER_ATTR}></div>
-            <div class="buttons">
-              <button ${ACTION_ATTR}="previous">Previous</button>
-              <button ${ACTION_ATTR}="next">Next</button>
-              <button ${ACTION_ATTR}="play-all">Play all</button>
-              <button ${ACTION_ATTR}="restart">Restart</button>
-            </div>
+            <button ${ACTION_ATTR}="first" title="First move" aria-label="First move">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="6" y1="5" x2="6" y2="19" />
+                <polyline points="18 6 10 12 18 18" />
+              </svg>
+            </button>
+            <button ${ACTION_ATTR}="back-10" title="Back 10 moves" aria-label="Back 10 moves">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="18 6 12 12 18 18" />
+                <polyline points="11 6 5 12 11 18" />
+              </svg>
+            </button>
+            <button ${ACTION_ATTR}="previous" title="Previous move" aria-label="Previous move">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="15 6 9 12 15 18" />
+              </svg>
+            </button>
+            <button ${ACTION_ATTR}="play-all" title="Play all" aria-label="Play all">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
+                <polygon points="6 4 20 12 6 20" />
+              </svg>
+            </button>
+            <button ${ACTION_ATTR}="next" title="Next move" aria-label="Next move">
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="9 6 15 12 9 18" />
+              </svg>
+            </button>
+            <button ${ACTION_ATTR}="forward-10" title="Forward 10 moves" aria-label="Forward 10 moves">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 6 12 12 6 18" />
+                <polyline points="13 6 19 12 13 18" />
+              </svg>
+            </button>
+            <button ${ACTION_ATTR}="last" title="Last move" aria-label="Last move">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="5" x2="18" y2="19" />
+                <polyline points="6 6 14 12 6 18" />
+              </svg>
+            </button>
+            <span class="default-counter" ${COUNTER_ATTR}></span>
           </div>
         </slot>
       `;
@@ -171,12 +216,8 @@ export class GoBoardControlsElement extends HTMLElement {
   }
 
   private setPlaying(playing: boolean): void {
-    const usingDefault = this.isUsingDefaultContent();
     for (const el of this.queryTagged(`[${ACTION_ATTR}="play-all"]`)) {
       el.toggleAttribute(PLAYING_ATTR, playing);
-      if (usingDefault && el instanceof HTMLButtonElement) {
-        el.textContent = playing ? "Stop" : "Play all";
-      }
     }
   }
 
@@ -205,10 +246,6 @@ export class GoBoardControlsElement extends HTMLElement {
       const template = el.getAttribute(COUNTER_ATTR) || "Move {index} / {count}";
       el.textContent = template.replace("{index}", String(moveIndex)).replace("{count}", String(moveCount));
     }
-  }
-
-  private isUsingDefaultContent(): boolean {
-    return this.slotEl.assignedElements().length === 0;
   }
 
   /**

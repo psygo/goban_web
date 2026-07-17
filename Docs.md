@@ -61,12 +61,41 @@ and steps through an SGF game record.
   `top`/`bottom`/`left`/`right`, e.g. `coordinates="top left"`
 - `coordinates-font` — CSS font-family for the labels
   (default `"system-ui, sans-serif"`)
-- `coordinates-font-size` — label size in board units, i.e. the same
-  scale as the grid (1 unit = 1 cell; default `0.32`) — not real CSS
-  pixels, since it's set inside the board's own SVG coordinate system
-- `coordinates-gap` — label distance from the grid edge, in board units
-  (default `0.5`, centered in the fixed 1-unit margin reserved for
-  labels; values much above ~1 will render outside the visible board)
+- `coordinates-font-size` — a real CSS length (bare numbers are px, e.g.
+  `"10"` or `"10pt"`; default is about `0.32` of a grid cell). Since
+  the labels live inside the board's own SVG coordinate space, the
+  component converts this to that internal unit using the board's
+  current rendered pixel size, and re-derives it via a `ResizeObserver`
+  whenever that size changes — so a given CSS length stays visually
+  the same size as the board itself resizes (e.g. on a responsive
+  `width="100%"` board).
+- `coordinates-gap` — a real CSS length for label distance from the
+  grid edge, converted the same way (default centers labels in the
+  fixed 1-unit margin reserved for them; very large values will render
+  labels outside the visible board)
+- `padding` — a real CSS length for the blank margin between the
+  host's outer edge and the grid/coordinates, converted the same way
+  as the two attributes above. Coordinate labels (when shown) get
+  their own reserved space automatically — `padding` is always *in
+  addition* to that, never eaten into by it, so it's literally the
+  distance from the edge to whatever's drawn outermost (labels if
+  shown, the grid otherwise). Small default (`padding` is a thin extra
+  buffer on top of the coordinate space, not the only thing providing
+  margin).
+- `x-start` / `x-end` / `y-start` / `y-end` — crop the rendered board
+  to a sub-rectangle of vertices (inclusive, 0-indexed, same
+  coordinate space as `move`'s `detail.x`/`detail.y`; out-of-range or
+  non-integer values clamp, an inverted start/end swaps). Defaults to
+  the full board. Useful for showing just a corner or side of a larger
+  board (e.g. a joseki/tsumego diagram). Edges that get cut off (don't
+  reach the true board edge) render their grid lines with a short
+  overhang past the last visible intersection, signaling the board
+  continues past what's shown; coordinate labels are limited to the
+  visible range. This only changes what's drawn and clickable — the
+  rules engine and a loaded `sgf` still operate on the full board size.
+  A non-square crop gives the board a non-square aspect ratio (when
+  `width`/`height` aren't both set, the host's own aspect ratio follows
+  automatically).
 - `interactive` — set to `"false"` to disable clicking/hover
 - `sgf` — a URL to fetch and parse; on success, resets the board to the
   SGF's root position (move 0) and enables the navigation API below
@@ -150,10 +179,17 @@ the document" fallback for discovery.
 
 ## `<go-metadata-container>`
 
-Displays the loaded SGF's root-node game info: players, ranks, komi,
-result, date, event (`PW`/`PB`/`WR`/`BR`/`KM`/`RE`/`DT`/`GN`). Shows
+Displays the loaded SGF's game info as a card: both players with a
+stone-color indicator (`PB`/`BR` and `PW`/`WR`), then a meta line
+(`KM`/`RE`/`DT`/`GN`), then — below a divider, only when present — the
+**current move's comment** (`C` property of the node at
+`board.moveIndex`). The comment updates live as you navigate; it
+appears/disappears per move, since most nodes won't have one. Shows
 "No game loaded." until its `<go-board>` fires `sgf-loaded`. Read-only
 — never calls back into the board.
+
+Listens to `sgf-loaded`, `sgf-error`, and `navigate` on its `<go-board>`
+(the last one is what drives the live comment).
 
 Attributes: `board` (optional, see "Component architecture" above).
 
@@ -161,13 +197,14 @@ Attributes: `board` (optional, see "Component architecture" above).
 
 Drives its `<go-board>`'s navigation API (`nextMove`/`previousMove`/
 `goToMove`) and play-all auto-advance (a 120ms interval until the main
-line ends). It ships a default Previous/Next/Play all/Restart button
-UI, but it's a **wrapper**, not a fixed widget: place your own markup
-inside it and that replaces the default UI entirely — this uses native
-`<slot>` fallback-content semantics (the default buttons are the
-`<slot>`'s fallback content, which stops rendering the moment the slot
-has any assigned children), so there's no configuration flag to
-toggle, just put elements inside it.
+line ends). It ships a default icon-button UI (first/back-10/previous/
+play-all/next/forward-10/last, plus a move counter), but it's a
+**wrapper**, not a fixed widget: place your own markup inside it and
+that replaces the default UI entirely — this uses native `<slot>`
+fallback-content semantics (the default buttons are the `<slot>`'s
+fallback content, which stops rendering the moment the slot has any
+assigned children), so there's no configuration flag to toggle, just
+put elements inside it.
 
 Tag your elements so `<go-board-controls>` knows what they're for:
 
@@ -192,10 +229,7 @@ additionally gets `data-go-playing` toggled while auto-play is
 running, for custom markup to react to (CSS, or your own
 `MutationObserver`).
 
-`index.html` has a full worked example: icon-button first/back-10/
-previous/play-all/next/forward-10/last controls (SVG chevrons, no
-text), styled entirely in the page's own `<style>` block — none of
-that layout or theming lives in the library. Minimal version:
+Minimal example:
 
 ```html
 <go-board-controls>
@@ -209,6 +243,69 @@ that layout or theming lives in the library. Minimal version:
 <style>
   .my-controls button[data-go-disabled] { opacity: 0.3; }
   .my-controls button[data-go-playing] { color: red; }
+</style>
+```
+
+This is, in fact, exactly the default UI's own markup (SVG chevrons,
+no text) — reproduced here as a starting point if you want to
+customize it (e.g. restyle, add a Restart button, or drop an action):
+
+```html
+<go-board-controls>
+  <div class="nav-controls">
+    <button data-go-action="first" title="First move" aria-label="First move">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="6" y1="5" x2="6" y2="19" />
+        <polyline points="18 6 10 12 18 18" />
+      </svg>
+    </button>
+    <button data-go-action="back-10" title="Back 10 moves" aria-label="Back 10 moves">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="18 6 12 12 18 18" />
+        <polyline points="11 6 5 12 11 18" />
+      </svg>
+    </button>
+    <button data-go-action="previous" title="Previous move" aria-label="Previous move">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 6 9 12 15 18" />
+      </svg>
+    </button>
+    <button data-go-action="play-all" title="Play all" aria-label="Play all">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
+        <polygon points="6 4 20 12 6 20" />
+      </svg>
+    </button>
+    <button data-go-action="next" title="Next move" aria-label="Next move">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 6 15 12 9 18" />
+      </svg>
+    </button>
+    <button data-go-action="forward-10" title="Forward 10 moves" aria-label="Forward 10 moves">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="6 6 12 12 6 18" />
+        <polyline points="13 6 19 12 13 18" />
+      </svg>
+    </button>
+    <button data-go-action="last" title="Last move" aria-label="Last move">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="18" y1="5" x2="18" y2="19" />
+        <polyline points="6 6 14 12 6 18" />
+      </svg>
+    </button>
+    <span class="nav-counter" data-go-counter></span>
+  </div>
+</go-board-controls>
+<style>
+  .nav-controls { display: flex; align-items: center; gap: 0.375rem; }
+  .nav-controls button {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 2.25rem; height: 2.25rem; padding: 0; border: none;
+    border-radius: 999px; background: #3a3a3a; color: #eee; cursor: pointer;
+  }
+  .nav-controls button:hover:not([data-go-disabled]) { background: #4a4a4a; }
+  .nav-controls button[data-go-disabled] { opacity: 0.3; cursor: default; }
+  .nav-controls button[data-go-action="play-all"][data-go-playing] { background: #7a3a3a; }
+  .nav-counter { margin-left: 0.375rem; font-variant-numeric: tabular-nums; color: #bbb; font-size: 0.85rem; }
 </style>
 ```
 
@@ -291,11 +388,14 @@ Implemented: board rendering, stone placement, captures, suicide
 prevention, simple ko, passing/game-end detection, SGF parsing,
 SGF loading/navigation via `<go-board>`, custom stone and board-background
 image theming, configurable board size (`width`/`height`), configurable
-coordinates (sides/font/font-size/gap), the container/metadata/controls
-component split, configurable-binding keyboard navigation, and a fully
-overridable `<go-board-controls>` (tag your own markup with
-`data-go-action`/`data-go-counter`; first/back-10/previous/next/
-forward-10/last/play-all/restart actions available).
+board padding, configurable coordinates (sides/font/font-size/gap),
+partial/cropped board rendering (`x-start`/`x-end`/`y-start`/`y-end`,
+with a bleed effect on cut edges), the container/metadata/controls
+component split, configurable-binding keyboard navigation, a fully
+overridable `<go-board-controls>` with a default icon-button UI (tag
+your own markup with `data-go-action`/`data-go-counter`; first/back-10/
+previous/next/forward-10/last/play-all/restart actions available), and
+a `<go-metadata-container>` that shows live per-move comments.
 
 Not yet implemented: scoring (territory counting), positional superko,
 handicap stones, SGF variation navigation/export, undo for

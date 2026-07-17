@@ -91,11 +91,13 @@ and steps through an SGF game record.
   reach the true board edge) render their grid lines with a short
   overhang past the last visible intersection, signaling the board
   continues past what's shown; coordinate labels are limited to the
-  visible range. This only changes what's drawn and clickable — the
-  rules engine and a loaded `sgf` still operate on the full board size.
-  A non-square crop gives the board a non-square aspect ratio (when
-  `width`/`height` aren't both set, the host's own aspect ratio follows
-  automatically).
+  visible range. The overhang is capped so it never reaches into a
+  shown coordinate label's space (it stops short of the label instead
+  of drawing through it). This only changes what's drawn and clickable
+  — the rules engine and a loaded `sgf` still operate on the full board
+  size. A non-square crop gives the board a non-square aspect ratio
+  (when `width`/`height` aren't both set, the host's own aspect ratio
+  follows automatically).
 - `interactive` — set to `"false"` to disable clicking/hover
 - `sgf` — a URL to fetch and parse; on success, resets the board to the
   SGF's root position (move 0) and enables the navigation API below
@@ -110,7 +112,10 @@ and steps through an SGF game record.
   renders that exact box (the SVG content still stays square-celled,
   letterboxed within it).
 - `background-image` — image URL to render behind the grid, replacing
-  the default wood gradient.
+  the default wood gradient. Stretched to exactly fill the board's own
+  box (not cropped-to-cover) — deliberate, since crop-to-cover of a
+  referenced SVG image triggers a Chromium rendering bug (a visible
+  seam) at the very non-square aspect ratios a cropped board can have.
 - `keyboard-shortcuts` — set to `"false"` to disable arrow-key SGF
   navigation (see "Keyboard navigation" below).
 
@@ -179,14 +184,25 @@ the document" fallback for discovery.
 
 ## `<go-metadata-container>`
 
-Displays the loaded SGF's game info as a card: both players with a
-stone-color indicator (`PB`/`BR` and `PW`/`WR`), then a meta line
-(`KM`/`RE`/`DT`/`GN`), then — below a divider, only when present — the
-**current move's comment** (`C` property of the node at
-`board.moveIndex`). The comment updates live as you navigate; it
-appears/disappears per move, since most nodes won't have one. Shows
-"No game loaded." until its `<go-board>` fires `sgf-loaded`. Read-only
-— never calls back into the board.
+Displays the loaded SGF's game info as a card, decomposed into three
+parts:
+
+- A black-player panel and a white-player panel side by side, each
+  with a stone-color indicator, name (`PB`/`PW`), and rank (`BR`/`WR`).
+- Below them, the rest of the data: a meta line (`KM`/`DT`/`GN`), the
+  game result (`RE`) — hidden by default behind a **"Show result"**
+  toggle button (click again to hide it), so replaying an SGF move by
+  move doesn't spoil the outcome unless you ask for it — and, only
+  when present, the **current move's comment** (`C` property of the
+  node at `board.moveIndex`). The comment updates live as you
+  navigate; it appears/disappears per move, since most nodes won't
+  have one.
+
+Shows "No game loaded." until its `<go-board>` fires `sgf-loaded`.
+Read-only — never calls back into the board. The result's reveal state
+resets (hides again) whenever a *new* game loads, but is left alone
+across move navigation, since it's a property of the game, not the
+position.
 
 Listens to `sgf-loaded`, `sgf-error`, and `navigate` on its `<go-board>`
 (the last one is what drives the live comment).

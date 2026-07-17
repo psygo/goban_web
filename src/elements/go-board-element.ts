@@ -55,6 +55,7 @@ interface BoardLayout {
   xEnd: number;
   yStart: number;
   yEnd: number;
+  padding: number;
   extentX: number;
   extentY: number;
   gridOffsetX: number;
@@ -435,6 +436,7 @@ export class GoBoardElement extends HTMLElement {
       xEnd,
       yStart,
       yEnd,
+      padding,
       extentX: xEnd - xStart + margin * 2,
       extentY: yEnd - yStart + margin * 2,
       gridOffsetX: margin - xStart,
@@ -720,15 +722,22 @@ export class GoBoardElement extends HTMLElement {
 
   private buildSvg(): void {
     const layout = this.computeLayout();
-    const { size, xStart, xEnd, yStart, yEnd, extentX, extentY, gridOffsetX, gridOffsetY } = layout;
+    const { size, xStart, xEnd, yStart, yEnd, padding, extentX, extentY, gridOffsetX, gridOffsetY } = layout;
     const stars = (STAR_POINTS[size] ?? []).filter(
       ([x, y]) => x >= xStart && x <= xEnd && y >= yStart && y <= yEnd,
     );
 
-    const bleedLeft = xStart > 0 ? CROP_BLEED : 0;
-    const bleedRight = xEnd < size - 1 ? CROP_BLEED : 0;
-    const bleedTop = yStart > 0 ? CROP_BLEED : 0;
-    const bleedBottom = yEnd < size - 1 ? CROP_BLEED : 0;
+    // Capped so the overhang never reaches into a shown coordinate label's
+    // space (it sits `gap` out from the grid edge) or past the outer edge
+    // when no label's there to clear — otherwise the bleed line gets drawn
+    // straight through the label text, or off the visible board entirely.
+    const sides = this.coordinateSides;
+    const gap = this.coordinatesGap;
+    const bleedCap = (labeled: boolean): number => Math.min(CROP_BLEED, labeled ? gap * 0.75 : padding);
+    const bleedLeft = xStart > 0 ? bleedCap(sides.has("left")) : 0;
+    const bleedRight = xEnd < size - 1 ? bleedCap(sides.has("right")) : 0;
+    const bleedTop = yStart > 0 ? bleedCap(sides.has("top")) : 0;
+    const bleedBottom = yEnd < size - 1 ? bleedCap(sides.has("bottom")) : 0;
 
     const gridLines: string[] = [];
     for (let y = yStart; y <= yEnd; y++) {
@@ -793,7 +802,14 @@ export class GoBoardElement extends HTMLElement {
       image.setAttribute("y", "0");
       image.setAttribute("width", String(extentX));
       image.setAttribute("height", String(extentY));
-      image.setAttribute("preserveAspectRatio", "xMidYMid slice");
+      // "none" (stretch to fill exactly), not "slice" (crop-to-cover):
+      // Chromium has a rendering bug where scaling a referenced SVG image
+      // via the slice/meet fitting math at a very non-square aspect ratio
+      // (e.g. a tall, narrow cropped board) produces a visible seam part
+      // way through the image. A plain non-uniform stretch sidesteps that
+      // codepath entirely, and for a decorative board texture the (usually
+      // slight) distortion is preferable to a hard visual glitch.
+      image.setAttribute("preserveAspectRatio", "none");
       image.setAttribute("href", backgroundImage);
       image.setAttribute("class", "board-bg-image");
       this.shadowRoot!.querySelector(".board-bg")!.insertAdjacentElement("afterend", image);

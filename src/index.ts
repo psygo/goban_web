@@ -9,6 +9,8 @@ export type {
 } from "./core/types";
 export { GoBoardElement } from "./elements/go-board-element";
 export type { IllegalMoveEventDetail, MoveEventDetail } from "./elements/go-board-element";
+export { SGFParseError, isSGFPass, parseSGF, sgfPointToVertex } from "./core/sgf";
+export type { SGFGameTree, SGFNode, SGFProperties } from "./core/sgf";
 
 declare global {
   interface HTMLElementTagNameMap {

@@ -28,6 +28,13 @@
         border-radius: 4px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       }
+      #game-info {
+        font-size: 0.9rem;
+        color: #bbb;
+      }
+      #game-info strong {
+        color: #eee;
+      }
       #status {
         display: flex;
         justify-content: space-between;
@@ -36,6 +43,10 @@
       button {
         cursor: pointer;
         padding: 0.5rem 1rem;
+      }
+      button:disabled {
+        cursor: default;
+        opacity: 0.5;
       }
       #controls {
         display: flex;
@@ -46,14 +57,17 @@
   <body>
     <main>
       <h1>goban-web</h1>
+      <p id="game-info">Loading game record…</p>
       <div id="status">
         <span id="turn">Black to move</span>
         <span id="captures">Captures — B: 0, W: 0</span>
       </div>
-      <go-board size="9"></go-board>
+      <go-board></go-board>
+      <div id="move-info">Move 0 / 0</div>
       <div id="controls">
-        <button id="pass">Pass</button>
-        <button id="reset">Reset</button>
+        <button id="next">Next move</button>
+        <button id="play-all">Play all</button>
+        <button id="restart">Restart</button>
       </div>
     </main>
     <script type="module" src="/src/main.ts"></script>

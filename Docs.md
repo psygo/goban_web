@@ -141,11 +141,41 @@ and steps through an SGF game record.
   Roman this way.
 - `label-offset-x` / `label-offset-y` — a real CSS length nudging `LB`
   label text off the exact center of its point (default `0`, i.e.
-  centered), converted the same way. The grid-clearing hole (see
-  below) follows the label to wherever it actually ends up, so an
-  offset label still doesn't get a line cut through it. Purely
-  cosmetic — never moves the point actually being labeled, just where
-  its text is drawn.
+  centered; negative values are supported, e.g. `"-6px"` to shift up/left),
+  converted the same way. The grid-clearing hole (see below) follows the
+  label to wherever it actually ends up, so an offset label still doesn't
+  get a line cut through it. Purely cosmetic — never moves the point
+  actually being labeled, just where its text is drawn.
+- `theme` — a built-in color/appearance preset, see "Themes" below.
+
+The board's own box (not just its internal SVG content) picks up a
+matching `border-radius` and `overflow: hidden` whenever it's rounded,
+with an explicit transparent background — so the corner cutout is
+always genuinely transparent (never dependent on nothing else
+happening to paint it), and a `box-shadow` a consumer adds to
+`go-board` itself (as the demo's `index.html` does) follows the
+rounded shape instead of a sharp-cornered box.
+
+### Themes
+
+`theme` selects a built-in color/appearance preset for everything the
+board draws that isn't independently attribute-driven:
+
+- `"wood"` (default) — the original look: a wood-grain gradient board
+  with gradient-shaded stones.
+- `"bookish"` — a flat black-ink-on-paper look modeled on printed Go
+  book diagrams (and the diagrams at
+  [neofanaroio.vercel.app](https://neofanaroio.vercel.app/posts/ing-cup-suicide)):
+  a plain white board, solid black/white stones with a bold black
+  outline, no gradients.
+
+An unrecognized `theme` value falls back to `"wood"`.
+`black-stone`/`white-stone`/`background-image` still override the
+active theme's stone/board appearance when set — themes only supply
+*defaults*, exactly like the wood look was the only, hardcoded default
+before `theme` existed. Markup contrast coloring (light-on-black-stone,
+dark-on-white-stone-or-empty — see "SGF setup stones and markup"
+below) also follows the active theme.
 
 ### Fonts
 

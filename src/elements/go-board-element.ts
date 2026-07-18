@@ -84,6 +84,77 @@ const MARK_RADIUS = STONE_RADIUS * 0.55;
 // only ever hides the *grid*, never the board texture underneath — see
 // `clearGridAt`.
 const GRID_CLEAR_RADIUS = STONE_RADIUS * 0.8;
+// A triangle mark (see `createMark`) is a standard equilateral triangle
+// centered on its *centroid* — apex at `-MARK_RADIUS`, base at
+// `+0.5 * MARK_RADIUS` — which is the mathematically correct way to center
+// an equilateral triangle, but leaves its bounding box lopsided (taller
+// above center than below). A perfectly centered circular clearing hole
+// then visibly clears more room below the triangle than above it. Shifting
+// the hole up by a quarter of the mark radius re-centers it on the
+// triangle's bounding box instead, splitting the gap evenly top and
+// bottom (solved for the offset that equalizes
+// `GRID_CLEAR_RADIUS - offset - MARK_RADIUS` and
+// `GRID_CLEAR_RADIUS + offset - 0.5 * MARK_RADIUS`).
+const TRIANGLE_CLEAR_OFFSET_Y = -MARK_RADIUS * 0.25;
+
+/**
+ * A named color/appearance preset for `theme` — every color the board
+ * draws that isn't already independently attribute-driven (`black-stone`/
+ * `white-stone`/`background-image` still override `blackStoneFill`/
+ * `whiteStoneFill`/`boardFill` when set, same as before themes existed).
+ */
+interface GoBoardTheme {
+  /** `.board-bg` fill — a flat color, or `"url(#wood)"` to use the built-in gradient. */
+  boardFill: string;
+  gridStroke: string;
+  starFill: string;
+  coordText: string;
+  /** Flat color, or `"url(#black-stone)"`/`"url(#white-stone)"` for the built-in gradients. */
+  blackStoneFill: string;
+  blackStoneStroke: string;
+  whiteStoneFill: string;
+  whiteStoneStroke: string;
+  stoneStrokeWidth: number;
+  /** Contrast colors for marks/labels: light-on-black-stone, dark-on-white-stone-or-empty. */
+  markLight: string;
+  markDark: string;
+}
+
+const THEMES: Record<string, GoBoardTheme> = {
+  // The original, only look, before `theme` existed — a wood grain board
+  // with gradient-shaded stones, kept as the default so existing usage is
+  // unaffected.
+  wood: {
+    boardFill: "url(#wood)",
+    gridStroke: "#453017",
+    starFill: "#453017",
+    coordText: "#453017",
+    blackStoneFill: "url(#black-stone)",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "url(#white-stone)",
+    whiteStoneStroke: "#9c9483",
+    stoneStrokeWidth: 0.02,
+    markLight: "#f5f2e9",
+    markDark: "#111111",
+  },
+  // A flat black-ink-on-paper look modeled on printed Go book diagrams —
+  // no gradients or wood grain, bolder stone outlines so a white stone
+  // still reads clearly against the light board.
+  bookish: {
+    boardFill: "#ffffff",
+    gridStroke: "#111111",
+    starFill: "#111111",
+    coordText: "#111111",
+    blackStoneFill: "#111111",
+    blackStoneStroke: "#111111",
+    whiteStoneFill: "#ffffff",
+    whiteStoneStroke: "#111111",
+    stoneStrokeWidth: 0.045,
+    markLight: "#ffffff",
+    markDark: "#111111",
+  },
+};
+const DEFAULT_THEME = "wood";
 
 interface BoardLayout {
   size: number;
@@ -225,6 +296,12 @@ function normalizeKeyBinding(value: string | string[] | undefined): string[] | u
  *   - `label-offset-x` / `label-offset-y` — real CSS length nudging `LB`
  *     label text off the exact point center (default `0`, i.e. centered).
  *     Purely cosmetic — doesn't move the underlying point being labeled.
+ *   - `theme` — a built-in color/appearance preset: `"wood"` (default —
+ *     wood grain board, gradient-shaded stones) or `"bookish"` (flat
+ *     black-ink-on-paper look modeled on printed Go book diagrams, no
+ *     gradients). `black-stone`/`white-stone`/`background-image` still
+ *     override the theme's stone/board appearance when set, same as
+ *     before themes existed. An unrecognized value falls back to `"wood"`.
  *
  * Keyboard navigation: with an `sgf` loaded, ArrowRight/ArrowLeft step
  * `nextMove()`/`previousMove()` whenever focus is anywhere inside the
@@ -266,6 +343,7 @@ export class GoBoardElement extends HTMLElement {
       "label-font",
       "label-font-size",
       "corner-radius",
+      "theme",
     ];
   }
 
@@ -362,7 +440,8 @@ export class GoBoardElement extends HTMLElement {
       name === "x-end" ||
       name === "y-start" ||
       name === "y-end" ||
-      name === "corner-radius"
+      name === "corner-radius" ||
+      name === "theme"
     ) {
       this.applyHostSize();
       this.buildSvg();
@@ -505,6 +584,12 @@ export class GoBoardElement extends HTMLElement {
     const attr = this.getAttribute("corner-radius");
     if (attr === null || attr === "") return null;
     return Math.max(0, this.cssLengthToBoardUnits(attr) ?? 0);
+  }
+
+  /** The active color/appearance preset (see `theme`). Unrecognized values fall back to `"wood"`. */
+  private get theme(): GoBoardTheme {
+    const attr = this.getAttribute("theme");
+    return (attr && THEMES[attr]) || THEMES[DEFAULT_THEME]!;
   }
 
   /** Inclusive vertex range shown along an axis, per `x-start`/`x-end`/`y-start`/`y-end`. */
@@ -930,8 +1015,26 @@ export class GoBoardElement extends HTMLElement {
         ? Math.min(margin * AUTO_CORNER_RADIUS_RATIO, MAX_AUTO_CORNER_RADIUS)
         : Math.min(override, Math.min(extentX, extentY) / 2);
 
+    // Reflected onto the *host's own* box (not just the internal SVG rect)
+    // as a percentage — border-radius percentages resolve against the
+    // box's own width/height, and extentX/extentY map 1:1 to the host's
+    // rendered width/height (the SVG viewBox always matches it exactly),
+    // so this lines up with the SVG rounding pixel-for-pixel without
+    // needing a separate pixel conversion or resize tracking. Combined
+    // with `overflow: hidden` and an explicit transparent background on
+    // `:host` (see STYLES), this guarantees the corner cutout is always
+    // transparent (not dependent on nothing else painting it) and that
+    // any host-level `box-shadow` a consumer adds (as the demo does)
+    // follows the rounded shape instead of the sharp corners of an
+    // unrounded box.
+    const radiusPercentX = extentX > 0 ? (cornerRadius / extentX) * 100 : 0;
+    const radiusPercentY = extentY > 0 ? (cornerRadius / extentY) * 100 : 0;
+    this.style.setProperty("--go-corner-radius", `${radiusPercentX}% / ${radiusPercentY}%`);
+
+    const theme = this.theme;
+
     this.shadowRoot!.innerHTML = `
-      <style>${STYLES}</style>
+      <style>${buildStyles(theme)}</style>
       <svg viewBox="0 0 ${extentX} ${extentY}" role="group" aria-label="Go board">
         <defs>
           <radialGradient id="wood" cx="35%" cy="30%" r="75%">
@@ -956,9 +1059,9 @@ export class GoBoardElement extends HTMLElement {
             <g class="grid-mask-holes"></g>
           </mask>
         </defs>
-        <rect class="board-bg" x="0" y="0" width="${extentX}" height="${extentY}" rx="${cornerRadius}" ry="${cornerRadius}" fill="url(#wood)" />
-        <g class="grid" stroke="#453017" stroke-width="0.035" mask="url(#grid-mask)">${gridLines.join("")}</g>
-        <g class="star-points" fill="#453017">${starMarkup}</g>
+        <rect class="board-bg" x="0" y="0" width="${extentX}" height="${extentY}" rx="${cornerRadius}" ry="${cornerRadius}" fill="${theme.boardFill}" />
+        <g class="grid" stroke="${theme.gridStroke}" stroke-width="0.035" mask="url(#grid-mask)">${gridLines.join("")}</g>
+        <g class="star-points" fill="${theme.starFill}">${starMarkup}</g>
         ${coordMarkup}
         <g class="stones"></g>
         <g class="markup"></g>
@@ -1063,9 +1166,10 @@ export class GoBoardElement extends HTMLElement {
     const inCrop = (v: Vertex): boolean => v.x >= xStart && v.x <= xEnd && v.y >= yStart && v.y <= yEnd;
 
     for (const [propertyId, shape] of Object.entries(MARKUP_SHAPES)) {
+      const clearOffsetY = shape === "triangle" ? TRIANGLE_CLEAR_OFFSET_Y : 0;
       for (const vertex of sgfPointsForProperty(node, propertyId)) {
         if (!inCrop(vertex)) continue;
-        this.clearGridAt(vertex.x, vertex.y, gridOffsetX + vertex.x, gridOffsetY + vertex.y);
+        this.clearGridAt(vertex.x, vertex.y, gridOffsetX + vertex.x, gridOffsetY + vertex.y + clearOffsetY);
         this.markupGroup.appendChild(this.createMark(shape, vertex.x, vertex.y, gridOffsetX, gridOffsetY));
       }
     }
@@ -1114,7 +1218,8 @@ export class GoBoardElement extends HTMLElement {
 
   /** A light mark reads on a black stone, a dark one on a white stone or empty point/wood. */
   private markColorAt(x: number, y: number): string {
-    return this._board.get(x, y) === Color.Black ? "#f5f2e9" : "#111111";
+    const theme = this.theme;
+    return this._board.get(x, y) === Color.Black ? theme.markLight : theme.markDark;
   }
 
   private createMark(
@@ -1229,23 +1334,34 @@ export class GoBoardElement extends HTMLElement {
     }
 
     const { gridOffsetX, gridOffsetY } = this.computeLayout();
+    const theme = this.theme;
     this.ghostStone.setAttribute("cx", String(gridOffsetX + vertex.x));
     this.ghostStone.setAttribute("cy", String(gridOffsetY + vertex.y));
     this.ghostStone.setAttribute("r", String(STONE_RADIUS * this.stoneSizeScale));
     this.ghostStone.setAttribute(
       "fill",
-      this._board.currentColor === Color.Black ? "#111111" : "#f5f2e9",
+      this._board.currentColor === Color.Black ? theme.markDark : theme.markLight,
     );
     this.ghostStone.setAttribute("visibility", "visible");
   }
 }
 
-const STYLES = `
+/** Builds the shadow stylesheet for the given `theme` — see `buildSvg`, which regenerates it on every rebuild. */
+function buildStyles(theme: GoBoardTheme): string {
+  return `
   :host {
     display: block;
     aspect-ratio: 1 / 1;
     user-select: none;
     -webkit-user-select: none;
+    background: transparent;
+    /* Matches the internal SVG's own rounded corners (see buildSvg) so
+     * the cutout stays genuinely transparent rather than depending on
+     * nothing else happening to paint it, and so a host-level
+     * box-shadow (set by a consumer, not this component) follows the
+     * rounded shape instead of a sharp-cornered box. */
+    border-radius: var(--go-corner-radius, 0px / 0px);
+    overflow: hidden;
   }
   svg {
     display: block;
@@ -1260,21 +1376,20 @@ const STYLES = `
   .coordinates text {
     font-family: var(--go-coords-font-family, system-ui, sans-serif);
     font-size: var(--go-coords-font-size, 0.32px);
-    fill: #453017;
+    fill: ${theme.coordText};
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
   }
-  .stone {
-    stroke-width: 0.02;
-  }
   .stone-black {
-    fill: url(#black-stone);
-    stroke: #000000;
+    fill: ${theme.blackStoneFill};
+    stroke: ${theme.blackStoneStroke};
+    stroke-width: ${theme.stoneStrokeWidth};
   }
   .stone-white {
-    fill: url(#white-stone);
-    stroke: #9c9483;
+    fill: ${theme.whiteStoneFill};
+    stroke: ${theme.whiteStoneStroke};
+    stroke-width: ${theme.stoneStrokeWidth};
   }
   .ghost-stone {
     opacity: 0.4;
@@ -1298,5 +1413,6 @@ const STYLES = `
     dominant-baseline: central;
   }
 `;
+}
 
 customElements.define("go-board", GoBoardElement);

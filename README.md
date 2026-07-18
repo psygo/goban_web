@@ -26,3 +26,4 @@ Check the [documentation](/Docs.md) for more info.
   - [@SabakiHQ/sgf](https://github.com/SabakiHQ/sgf)
 - Others
   - [OGS - goban](https://github.com/online-go/goban)
+  - [@psygo/fanaro-sabaki-theme-collection](https://github.com/FanaroEngineering/fanaro_sabaki_theme_collection)

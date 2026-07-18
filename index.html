@@ -24,6 +24,82 @@
           color: #1a1a1a;
         }
       }
+      /*
+       * Manual theme override: the components auto-follow
+       * `prefers-color-scheme`, but that reflects the OS/browser setting
+       * and can't be flipped from page JS. To let the button below force a
+       * theme regardless of that, both the page and the two peripheral
+       * components read their colors through a shared `--goban-*` custom
+       * property layer (see "Theming" in Docs.md) — setting those here,
+       * scoped to `:root[data-theme="..."]`, overrides the components'
+       * own `prefers-color-scheme`-driven defaults, since custom
+       * properties inherit through shadow DOM boundaries. No `data-theme`
+       * attribute (the default) means "follow the OS", same as before.
+       */
+      :root[data-theme="dark"] {
+        --goban-text: #eee;
+        --goban-text-secondary: #999;
+        --goban-text-muted: #888;
+        --goban-comment: #ccc;
+        --goban-panel-bg: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.1),
+          rgba(255, 255, 255, 0.04)
+        );
+        --goban-panel-border: rgba(255, 255, 255, 0.14);
+        --goban-panel-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+        --goban-card-bg: linear-gradient(
+          180deg,
+          rgba(255, 255, 255, 0.05),
+          rgba(255, 255, 255, 0.02)
+        );
+        --goban-card-border: rgba(255, 255, 255, 0.09);
+        --goban-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+        --goban-toggle-bg: rgba(255, 255, 255, 0.08);
+        --goban-toggle-bg-hover: rgba(255, 255, 255, 0.14);
+        --goban-toggle-border: rgba(255, 255, 255, 0.12);
+        --goban-btn-bg: #3a3a3a;
+        --goban-btn-bg-hover: #4a4a4a;
+        --goban-btn-color: #eee;
+        --goban-btn-playing-bg: #7a3a3a;
+        --goban-counter: #bbb;
+      }
+      :root[data-theme="dark"] body {
+        background: #2b2b2b;
+        color: #eee;
+      }
+      :root[data-theme="light"] {
+        --goban-text: #1a1a1a;
+        --goban-text-secondary: #666;
+        --goban-text-muted: #767676;
+        --goban-comment: #444;
+        --goban-panel-bg: linear-gradient(
+          180deg,
+          rgba(0, 0, 0, 0.05),
+          rgba(0, 0, 0, 0.015)
+        );
+        --goban-panel-border: rgba(0, 0, 0, 0.18);
+        --goban-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+        --goban-card-bg: linear-gradient(
+          180deg,
+          rgba(0, 0, 0, 0.035),
+          rgba(0, 0, 0, 0.015)
+        );
+        --goban-card-border: rgba(0, 0, 0, 0.1);
+        --goban-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+        --goban-toggle-bg: rgba(0, 0, 0, 0.06);
+        --goban-toggle-bg-hover: rgba(0, 0, 0, 0.1);
+        --goban-toggle-border: rgba(0, 0, 0, 0.14);
+        --goban-btn-bg: #e6e4e0;
+        --goban-btn-bg-hover: #d8d5cf;
+        --goban-btn-color: #2a2a2a;
+        --goban-btn-playing-bg: #f0c2c2;
+        --goban-counter: #666;
+      }
+      :root[data-theme="light"] body {
+        background: #fafafa;
+        color: #1a1a1a;
+      }
       main {
         width: min(640px, 90vw);
         display: flex;
@@ -35,14 +111,91 @@
         border-radius: 4px;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
       }
+      .title-row {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+      }
+      .title-row h1 {
+        margin: 0;
+      }
+      .theme-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: none;
+        width: 2.5rem;
+        height: 2.5rem;
+        padding: 0;
+        border: none;
+        border-radius: 999px;
+        background: rgba(127, 127, 127, 0.18);
+        color: inherit;
+        cursor: pointer;
+      }
+      .theme-toggle:hover {
+        background: rgba(127, 127, 127, 0.3);
+      }
+      .theme-toggle svg {
+        width: 1.15rem;
+        height: 1.15rem;
+      }
+      .theme-toggle .icon-moon {
+        display: none;
+      }
+      .theme-toggle.is-light .icon-sun {
+        display: none;
+      }
+      .theme-toggle.is-light .icon-moon {
+        display: block;
+      }
     </style>
   </head>
   <body>
     <main>
-      <h1>goban-web</h1>
+      <div class="title-row">
+        <h1>goban-web</h1>
+        <button
+          id="theme-toggle"
+          class="theme-toggle"
+          type="button"
+          title="Toggle color theme"
+          aria-label="Toggle color theme"
+        >
+          <svg
+            class="icon-sun"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="2"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+          >
+            <circle cx="12" cy="12" r="4" />
+            <line x1="12" y1="2" x2="12" y2="4.5" />
+            <line x1="12" y1="19.5" x2="12" y2="22" />
+            <line x1="2" y1="12" x2="4.5" y2="12" />
+            <line x1="19.5" y1="12" x2="22" y2="12" />
+            <line x1="4.9" y1="4.9" x2="6.6" y2="6.6" />
+            <line x1="17.4" y1="17.4" x2="19.1" y2="19.1" />
+            <line x1="4.9" y1="19.1" x2="6.6" y2="17.4" />
+            <line x1="17.4" y1="6.6" x2="19.1" y2="4.9" />
+          </svg>
+          <svg
+            class="icon-moon"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            stroke="none"
+          >
+            <path d="M20 14.5A8.5 8.5 0 1 1 9.5 4a7 7 0 0 0 10.5 10.5Z" />
+          </svg>
+        </button>
+      </div>
       <go-board-container>
+        <go-metadata-container details="false"></go-metadata-container>
         <go-board
-          sgf="/assets/xu_wenyan_vs_risa_ueno_17_07_2026.sgf"
+          sgf="/assets/ing_cup_rules_1.sgf"
           black-stone="/assets/black-stone.svg"
           white-stone="/assets/white-stone.svg"
           background-image="/assets/board-background.svg"
@@ -53,10 +206,38 @@
           coordinates-font-size="10pt"
           padding="12px"
         ></go-board>
-        <go-board-controls></go-board-controls>
-        <go-metadata-container></go-metadata-container>
+        <go-board-controls counter="false"></go-board-controls>
       </go-board-container>
     </main>
     <script type="module" src="/src/main.ts"></script>
+    <script type="module">
+      const THEME_KEY = "goban-demo-theme"
+      const root = document.documentElement
+      const button = document.getElementById("theme-toggle")
+
+      const stored = localStorage.getItem(THEME_KEY)
+      if (stored === "light" || stored === "dark") root.dataset.theme = stored
+
+      function currentTheme() {
+        if (root.dataset.theme === "light" || root.dataset.theme === "dark")
+          return root.dataset.theme
+        return window.matchMedia("(prefers-color-scheme: light)").matches
+          ? "light"
+          : "dark"
+      }
+
+      function syncButton() {
+        button.classList.toggle("is-light", currentTheme() === "light")
+      }
+
+      button.addEventListener("click", () => {
+        const next = currentTheme() === "light" ? "dark" : "light"
+        root.dataset.theme = next
+        localStorage.setItem(THEME_KEY, next)
+        syncButton()
+      })
+
+      syncButton()
+    </script>
   </body>
 </html>

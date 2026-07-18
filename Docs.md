@@ -184,40 +184,86 @@ the document" fallback for discovery.
 
 ## `<go-metadata-container>`
 
-Displays the loaded SGF's game info as two stacked containers:
-
-- A players row: a black-player panel and a white-player panel side by
-  side — no "vs" divider between them, the two stone colors already
-  tell them apart — each with a stone-color indicator and name+rank on
-  one line (`PB`/`BR`, `PW`/`WR`).
-- Right below it, its own separate card for the rest of the data
-  (toggle it off entirely with the `details` attribute, see below): a
-  meta line with komi/date/event (`KM`/`DT`/`GN`) **each on their own
-  line**, the game result (`RE`) — hidden by default behind a **"Show
-  result"** toggle button (click again to hide it), so replaying an
-  SGF move by move doesn't spoil the outcome unless you ask for it —
-  and, only when present, the **current move's comment** (`C` property
-  of the node at `board.moveIndex`). The comment updates live as you
-  navigate; it appears/disappears per move, since most nodes won't
-  have one.
-
-Colors adapt to `prefers-color-scheme: light` automatically (no
-attribute needed) — see "Theming" below.
+Displays the loaded SGF's game info as two stacked containers: a
+players row (a black-player panel and a white-player panel side by
+side — same background for both, told apart by their stone-color
+indicator, no "vs" divider needed — with name+rank on one line,
+`PB`/`BR` and `PW`/`WR`) and, right below it, its own separate card for
+the rest of the data: a meta line with komi/date/event (`KM`/`DT`/`GN`)
+each on their own line, the game result (`RE`) — hidden by default
+behind a **"Show result"** toggle button (click again to hide it), so
+replaying an SGF move by move doesn't spoil the outcome unless you ask
+for it — and, only when present, the **current move's comment** (`C`
+property of the node at `board.moveIndex`), updating live as you
+navigate.
 
 Shows "No game loaded." until its `<go-board>` fires `sgf-loaded`.
 Read-only — never calls back into the board. The result's reveal state
 resets (hides again) whenever a *new* game loads, but is left alone
 across move navigation, since it's a property of the game, not the
-position.
+position. Colors adapt to `prefers-color-scheme: light` automatically
+(no attribute needed) — see "Theming" below.
+
+Like `<go-board-controls>`, it's a **wrapper**, not a fixed widget:
+place your own markup inside it (native `<slot>` fallback-content
+semantics mean any light-DOM children you add replace the default UI
+entirely) and tag elements so this element knows what they're for:
+
+- `data-go-field="black-name" | "black-rank" | "white-name" |
+  "white-rank" | "komi" | "date" | "event" | "result" |
+  "result-toggle-label" | "comment"` on any element fills its text with
+  that piece of data, kept live as the board navigates or a new game
+  loads. `result` stays empty text until revealed; everything else is
+  always filled in (empty string if the SGF doesn't have it).
+- `data-go-action="toggle-result"` on any clickable element toggles the
+  result's reveal state; tagged elements get `data-go-revealed` toggled
+  to reflect it, for custom styling.
+
+For a fully custom design that isn't just restyling tagged elements
+(canvas, a different framework, anything reading the data directly),
+use the `gameInfo` property instead — same data, same update schedule,
+also fired as a `metadata-changed` event (`detail: GoGameInfo | null`)
+for code that only holds a reference to this element rather than the
+`<go-board>` itself.
+
+Minimal custom-markup example:
+
+```html
+<go-metadata-container>
+  <div class="my-metadata">
+    <strong data-go-field="black-name"></strong>
+    <span data-go-field="black-rank"></span>
+    vs
+    <strong data-go-field="white-name"></strong>
+    <span data-go-field="white-rank"></span>
+    <div>Komi: <span data-go-field="komi"></span></div>
+    <button data-go-action="toggle-result" data-go-field="result-toggle-label"></button>
+    <span data-go-field="result"></span>
+  </div>
+</go-metadata-container>
+```
 
 Listens to `sgf-loaded`, `sgf-error`, and `navigate` on its `<go-board>`
 (the last one is what drives the live comment).
 
+Properties:
+
+- `gameInfo: GoGameInfo | null` — `{ black: { name, rank? }, white: {
+  name, rank? }, komi?, date?, event?, result?, comment? }`, or `null`
+  when no game is loaded
+
 Attributes:
 
 - `board` (optional, see "Component architecture" above)
-- `details` — set to `"false"` to hide everything below the two player
-  panels (meta line, result, comment), showing just the players
+- `details` — set to `"false"` to hide the second card (meta line,
+  result, comment) entirely, showing just the players row. Only
+  affects the *default* UI — for custom markup, simply don't include
+  those `data-go-field` elements.
+
+Events:
+
+- `metadata-changed` — `detail: GoGameInfo | null`, fired whenever the
+  displayed data changes (new game, navigation, or a result reveal)
 
 ## `<go-board-controls>`
 
@@ -344,30 +390,49 @@ customize it (e.g. restyle, add a Restart button, or drop an action):
 </style>
 ```
 
-Attributes: `board` (optional, see "Component architecture" above).
+Attributes:
+
+- `board` (optional, see "Component architecture" above)
+- `counter` — set to `"false"` to omit the move counter from the
+  *default* UI (buttons stay centered either way, since the layout
+  reserves that space regardless). No effect once you've replaced the
+  default with your own markup — just don't tag anything
+  `data-go-counter` there.
 
 ## Theming
 
 `<go-metadata-container>` and `<go-board-controls>` follow the
 viewer's OS/browser color scheme automatically via a
 `prefers-color-scheme: light` media query internally — no attribute or
-setup needed, and no JavaScript is involved. `<go-board>` itself
-doesn't need a light/dark variant: its wood-toned palette and dark
-grid lines already read fine against either a light or dark page
-background (see the demo, which sets its own light/dark body via the
-same media query).
+setup needed, and no JavaScript is involved by default. `<go-board>`
+itself doesn't need a light/dark variant: its wood-toned palette and
+dark grid lines already read fine against either a light or dark page
+background.
 
-Each component exposes its colors as CSS custom properties (with the
-dark-mode values as the defaults, overridden under
-`prefers-color-scheme: light`) scoped to its own shadow root, in case
-you want to override specific colors from outside — e.g.
-`go-metadata-container { --go-meta-panel-black-bg: #111; }`.
-`<go-metadata-container>`'s properties: `--go-meta-text`,
-`--go-meta-text-secondary`, `--go-meta-text-muted`, `--go-meta-comment`,
-`--go-meta-panel-black-bg`/`-border`, `--go-meta-panel-white-bg`/`-border`,
-`--go-meta-card-bg`/`-border`/`-shadow`, `--go-meta-toggle-bg`/`-bg-hover`/`-border`.
-`<go-board-controls>`'s properties: `--go-controls-btn-bg`/`-bg-hover`/`-color`,
-`--go-controls-btn-playing-bg`, `--go-controls-counter`.
+Each component exposes its colors as internal CSS custom properties
+(dark values as the default, overridden under `prefers-color-scheme:
+light`), and each of those is itself written as `var(--goban-x,
+internal-value)` — so setting a `--goban-*` property anywhere *outside*
+the component (e.g. on `:root`) overrides its value, since custom
+properties inherit through shadow DOM boundaries. This is what makes a
+manual, JS-driven theme toggle possible: `prefers-color-scheme` alone
+reflects the OS/browser setting and can't be flipped from page script,
+but a page can force a theme by setting the full `--goban-*` layer on
+`:root[data-theme="dark"]` / `:root[data-theme="light"]` and toggling
+that attribute — exactly what the demo's top-right sun/moon button
+does (see `index.html`; it also persists the choice to
+`localStorage`). No `data-theme` attribute means "follow the OS", same
+as the zero-setup default.
+
+The shared `--goban-*` property names (set them on `:root`, or on the
+component itself for a narrower override): `--goban-text`,
+`--goban-text-secondary`, `--goban-text-muted`, `--goban-comment`,
+`--goban-panel-bg` (shared by both player panels — see below),
+`--goban-panel-border`, `--goban-panel-shadow`, `--goban-card-bg`, `--goban-card-border`,
+`--goban-card-shadow`, `--goban-toggle-bg`, `--goban-toggle-bg-hover`,
+`--goban-toggle-border` (all `<go-metadata-container>`), and
+`--goban-btn-bg`, `--goban-btn-bg-hover`, `--goban-btn-color`,
+`--goban-btn-playing-bg`, `--goban-counter` (all `<go-board-controls>`).
 
 ## `Board` (rules engine)
 
@@ -451,13 +516,20 @@ partial/cropped board rendering (`x-start`/`x-end`/`y-start`/`y-end`,
 with a bleed effect on cut edges), the container/metadata/controls
 component split, configurable-binding keyboard navigation, a fully
 overridable `<go-board-controls>` with a default icon-button UI,
-centered as a group with a right-pinned move counter (tag your own
-markup with `data-go-action`/`data-go-counter`; first/back-10/previous/
-next/forward-10/last/play-all/restart actions available), and a
-`<go-metadata-container>` with black/white player panels, a
-toggleable (`details="false"`) info card, a spoiler-hidden result, and
-live per-move comments — plus automatic light/dark theming
-(`prefers-color-scheme`) for both peripheral components.
+centered as a group with a right-pinned, optional (`counter="false"`)
+move counter (tag your own markup with `data-go-action`/`data-go-counter`;
+first/back-10/previous/next/forward-10/last/play-all/restart actions
+available), and a fully overridable `<go-metadata-container>` (same
+`<slot>`-wrapper pattern, tag your own markup with
+`data-go-field`/`data-go-action="toggle-result"`, or read the
+`gameInfo` property / `metadata-changed` event for a fully custom,
+non-DOM-restyling design) with same-background black/white player
+panels, a toggleable (`details="false"`) info card, a spoiler-hidden
+result, and live per-move comments — plus automatic light/dark theming
+(`prefers-color-scheme`) for both peripheral components, with a
+`--goban-*` CSS custom property layer that lets a page force a theme
+regardless of OS preference (see "Theming"; the demo's title-row
+sun/moon button does exactly this).
 
 Not yet implemented: scoring (territory counting), positional superko,
 handicap stones, SGF variation navigation/export, undo for

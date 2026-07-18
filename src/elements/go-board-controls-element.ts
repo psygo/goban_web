@@ -12,19 +12,23 @@ const STYLES = `
   :host {
     display: block;
     font-family: system-ui, sans-serif;
-    --go-controls-btn-bg: #3a3a3a;
-    --go-controls-btn-bg-hover: #4a4a4a;
-    --go-controls-btn-color: #eee;
-    --go-controls-btn-playing-bg: #7a3a3a;
-    --go-controls-counter: #bbb;
+    /* var(--goban-x, default): lets an ancestor outside the shadow tree
+       (e.g. the page setting --goban-btn-bg on :root) override this, since
+       custom properties inherit through shadow boundaries — see "Theming"
+       in Docs.md. */
+    --go-controls-btn-bg: var(--goban-btn-bg, #3a3a3a);
+    --go-controls-btn-bg-hover: var(--goban-btn-bg-hover, #4a4a4a);
+    --go-controls-btn-color: var(--goban-btn-color, #eee);
+    --go-controls-btn-playing-bg: var(--goban-btn-playing-bg, #7a3a3a);
+    --go-controls-counter: var(--goban-counter, #bbb);
   }
   @media (prefers-color-scheme: light) {
     :host {
-      --go-controls-btn-bg: #e6e4e0;
-      --go-controls-btn-bg-hover: #d8d5cf;
-      --go-controls-btn-color: #2a2a2a;
-      --go-controls-btn-playing-bg: #f0c2c2;
-      --go-controls-counter: #666;
+      --go-controls-btn-bg: var(--goban-btn-bg, #e6e4e0);
+      --go-controls-btn-bg-hover: var(--goban-btn-bg-hover, #d8d5cf);
+      --go-controls-btn-color: var(--goban-btn-color, #2a2a2a);
+      --go-controls-btn-playing-bg: var(--goban-btn-playing-bg, #f0c2c2);
+      --go-controls-counter: var(--goban-counter, #666);
     }
   }
   .default-controls {
@@ -100,6 +104,9 @@ const STYLES = `
  * Attributes:
  *   - `board` (optional element id of the `<go-board>` to control;
  *     otherwise the nearest one is located automatically)
+ *   - `counter` — set to `"false"` to omit the move counter from the
+ *     *default* UI (no effect once you've replaced it with your own
+ *     markup — just don't tag anything `data-go-counter` there)
  */
 export class GoBoardControlsElement extends HTMLElement {
   private board: GoBoardElement | null = null;
@@ -160,6 +167,15 @@ export class GoBoardControlsElement extends HTMLElement {
       `;
       this.slotEl = shadow.querySelector("slot") as HTMLSlotElement;
       this.addEventListener("click", this.handleClick);
+      if (this.getAttribute("counter") === "false") {
+        shadow.querySelector(".default-counter")?.remove();
+      }
+      // Re-binds data-go-action/data-go-counter elements when the slot's
+      // assigned content changes — e.g. a developer swapping in their own
+      // markup after this element has already connected and rendered
+      // once, which wouldn't otherwise pick up current state until the
+      // next board event.
+      this.slotEl.addEventListener("slotchange", () => this.updateUI());
     }
 
     this.board = resolveBoard(this);

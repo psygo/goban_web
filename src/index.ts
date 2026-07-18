@@ -27,6 +27,7 @@ export type {
 } from "./elements/go-board-element";
 export { GoBoardContainerElement } from "./elements/go-board-container-element";
 export { GoMetadataContainerElement } from "./elements/go-metadata-container-element";
+export type { GoGameInfo, GoPlayerInfo } from "./elements/go-metadata-container-element";
 export { GoBoardControlsElement } from "./elements/go-board-controls-element";
 
 declare global {

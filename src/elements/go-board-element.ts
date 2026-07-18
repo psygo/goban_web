@@ -118,6 +118,23 @@ interface GoBoardTheme {
   /** Contrast colors for marks/labels: light-on-black-stone, dark-on-white-stone-or-empty. */
   markLight: string;
   markDark: string;
+  /** Soft drop shadow under every stone, for a raised/glossy look (see `buildSvg`'s `stone-shadow` filter). */
+  stoneShadow: boolean;
+  /** `stone-shadow` filter tuning — only meaningful when `stoneShadow` is true. Defaults: `"#000000"` / `0.5`. */
+  stoneShadowColor?: string;
+  stoneShadowOpacity?: number;
+  /**
+   * Built-in default for `background-image`/`black-stone`/`white-stone`
+   * when the attribute itself isn't set — an explicit attribute always
+   * wins over these. Unlike the flat/gradient fields above, these point
+   * at real image files (see `public/assets/themes/`), so using one of
+   * these theme presets outside this project's own demo requires hosting
+   * copies of those files at matching paths (or just setting the
+   * corresponding attribute directly instead).
+   */
+  boardImage?: string;
+  blackStoneImage?: string;
+  whiteStoneImage?: string;
 }
 
 const THEMES: Record<string, GoBoardTheme> = {
@@ -136,6 +153,7 @@ const THEMES: Record<string, GoBoardTheme> = {
     stoneStrokeWidth: 0.02,
     markLight: "#f5f2e9",
     markDark: "#111111",
+    stoneShadow: false,
   },
   // A flat black-ink-on-paper look modeled on printed Go book diagrams —
   // no gradients or wood grain, bolder stone outlines so a white stone
@@ -152,6 +170,120 @@ const THEMES: Record<string, GoBoardTheme> = {
     stoneStrokeWidth: 0.045,
     markLight: "#ffffff",
     markDark: "#111111",
+    stoneShadow: false,
+  },
+  // A brighter, more saturated gold board with raised, drop-shadowed
+  // stones — modeled on Go Magic's Sabaki-inspired board theme.
+  gomagic: {
+    boardFill: "url(#gomagic-wood)",
+    gridStroke: "#2a2118",
+    starFill: "#2a2118",
+    coordText: "#2a2118",
+    blackStoneFill: "url(#black-stone)",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "url(#white-stone)",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "#f5f2e9",
+    markDark: "#111111",
+    stoneShadow: true,
+    stoneShadowOpacity: 0.65,
+  },
+  // Sabaki's "Photorealistic" theme (SabakiHQ/theme-photorealistic) —
+  // photographic-textured stones on the default wood board.
+  photorealistic: {
+    boardFill: "url(#wood)",
+    gridStroke: "#222222",
+    starFill: "#222222",
+    coordText: "#222222",
+    blackStoneFill: "#0e0e0e",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "#ebebeb",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "#eeeeee",
+    markDark: "#222222",
+    stoneShadow: false,
+    blackStoneImage: "/assets/themes/photorealistic/black.png",
+    whiteStoneImage: "/assets/themes/photorealistic/white.png",
+  },
+  // Sabaki's "Happy Stones" theme (upsided/upsided-sabaki-themes) —
+  // glossy glass stones on a pine board.
+  "happy-stones": {
+    boardFill: "#e8b563",
+    boardImage: "/assets/themes/happy-stones/board.png",
+    gridStroke: "#6b4201",
+    starFill: "#6b4201",
+    coordText: "#6b4201",
+    blackStoneFill: "#111111",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "#f5f2e9",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "#d87700",
+    markDark: "#fb8a00",
+    stoneShadow: false,
+    blackStoneImage: "/assets/themes/happy-stones/glass_black.png",
+    whiteStoneImage: "/assets/themes/happy-stones/glass_white.png",
+  },
+  // Sabaki's "Hikaru" theme (upsided/upsided-sabaki-themes) — a crisp
+  // SVG board and stones with an anime feel.
+  hikaru: {
+    boardFill: "#ffffff",
+    boardImage: "/assets/themes/hikaru/board.svg",
+    gridStroke: "rgba(76, 47, 0, 0.8)",
+    starFill: "rgba(76, 47, 0, 0.8)",
+    coordText: "rgba(76, 47, 0, 0.8)",
+    blackStoneFill: "#111111",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "#eeeeee",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "#eeeeee",
+    markDark: "#111111",
+    stoneShadow: false,
+    blackStoneImage: "/assets/themes/hikaru/black_stone.svg",
+    whiteStoneImage: "/assets/themes/hikaru/white_stone.svg",
+  },
+  // Sabaki's "BadukTV" theme (upsided/upsided-sabaki-themes) — styled
+  // for broadcast, glass stones on a smooth pale board.
+  baduktv: {
+    boardFill: "#d9bd7e",
+    boardImage: "/assets/themes/baduktv/board.png",
+    gridStroke: "#3c392f",
+    starFill: "#3c392f",
+    coordText: "#3c392f",
+    blackStoneFill: "#111111",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "#f5f2e9",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "rgba(255, 255, 255, 0.75)",
+    markDark: "rgba(0, 0, 0, 0.75)",
+    stoneShadow: false,
+    blackStoneImage: "/assets/themes/baduktv/glass_black.png",
+    whiteStoneImage: "/assets/themes/baduktv/glass_white.png",
+  },
+  // The "BattsGo" fan theme (JJscott/BattsGo) — Twitch emote stones on
+  // a redwood board, gold ink.
+  battsgo: {
+    boardFill: "#8b3a1a",
+    boardImage: "/assets/themes/battsgo/board.jpg",
+    gridStroke: "#daa520",
+    starFill: "#daa520",
+    coordText: "#daa520",
+    blackStoneFill: "#111111",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "#f5f2e9",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "#daa520",
+    markDark: "#daa520",
+    stoneShadow: true,
+    stoneShadowColor: "#280000",
+    stoneShadowOpacity: 0.55,
+    blackStoneImage: "/assets/themes/battsgo/black_stone.png",
+    whiteStoneImage: "/assets/themes/battsgo/white_stone.png",
   },
 };
 const DEFAULT_THEME = "wood";
@@ -297,11 +429,18 @@ function normalizeKeyBinding(value: string | string[] | undefined): string[] | u
  *     label text off the exact point center (default `0`, i.e. centered).
  *     Purely cosmetic — doesn't move the underlying point being labeled.
  *   - `theme` — a built-in color/appearance preset: `"wood"` (default —
- *     wood grain board, gradient-shaded stones) or `"bookish"` (flat
+ *     wood grain board, gradient-shaded stones), `"bookish"` (flat
  *     black-ink-on-paper look modeled on printed Go book diagrams, no
- *     gradients). `black-stone`/`white-stone`/`background-image` still
- *     override the theme's stone/board appearance when set, same as
- *     before themes existed. An unrecognized value falls back to `"wood"`.
+ *     gradients), `"gomagic"` (brighter gold board, raised stones with a
+ *     soft drop shadow — modeled on Go Magic's Sabaki-inspired board), or
+ *     five themes ported from Sabaki's theme directory —
+ *     `"photorealistic"`, `"happy-stones"`, `"hikaru"`, `"baduktv"`, and
+ *     `"battsgo"` — which use real image assets under
+ *     `public/assets/themes/` (see "Themes" in Docs.md for what each
+ *     looks like and what hosting them elsewhere requires).
+ *     `black-stone`/`white-stone`/`background-image` still override the
+ *     theme's stone/board appearance when set, same as before themes
+ *     existed. An unrecognized value falls back to `"wood"`.
  *
  * Keyboard navigation: with an `sgf` loaded, ArrowRight/ArrowLeft step
  * `nextMove()`/`previousMove()` whenever focus is anywhere inside the
@@ -1051,6 +1190,19 @@ export class GoBoardElement extends HTMLElement {
             <stop offset="75%" stop-color="#e7e2d6" />
             <stop offset="100%" stop-color="#c9c3b3" />
           </radialGradient>
+          <radialGradient id="gomagic-wood" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#eec97a" />
+            <stop offset="100%" stop-color="#c9963f" />
+          </radialGradient>
+          <filter id="stone-shadow" x="-50%" y="-50%" width="200%" height="200%">
+            <feDropShadow
+              dx="0.05"
+              dy="0.09"
+              stdDeviation="0.05"
+              flood-color="${theme.stoneShadowColor ?? "#000000"}"
+              flood-opacity="${theme.stoneShadowOpacity ?? 0.5}"
+            />
+          </filter>
           <clipPath id="board-clip">
             <rect x="0" y="0" width="${extentX}" height="${extentY}" rx="${cornerRadius}" ry="${cornerRadius}" />
           </clipPath>
@@ -1077,7 +1229,9 @@ export class GoBoardElement extends HTMLElement {
 
     // Built via DOM APIs (not string-interpolated into the markup above) so
     // an attacker-controlled URL can't break out of the `href` attribute.
-    const backgroundImage = this.getAttribute("background-image");
+    // Falls back to the active theme's own board image if the attribute
+    // itself isn't set, same precedence as `stoneImageUrl`.
+    const backgroundImage = this.getAttribute("background-image") || theme.boardImage || null;
     if (backgroundImage) {
       const image = document.createElementNS(SVG_NS, "image");
       image.setAttribute("x", "0");
@@ -1293,9 +1447,11 @@ export class GoBoardElement extends HTMLElement {
     return el;
   }
 
+  /** `black-stone`/`white-stone` attribute, falling back to the active theme's own stone image if it has one. */
   private stoneImageUrl(color: Color): string | null {
     const attr = color === Color.Black ? "black-stone" : "white-stone";
-    return this.getAttribute(attr) || null;
+    const themeImage = color === Color.Black ? this.theme.blackStoneImage : this.theme.whiteStoneImage;
+    return this.getAttribute(attr) || themeImage || null;
   }
 
   private createStone(x: number, y: number, color: Color, gridOffsetX: number, gridOffsetY: number): SVGElement {
@@ -1380,6 +1536,9 @@ function buildStyles(theme: GoBoardTheme): string {
     text-anchor: middle;
     dominant-baseline: middle;
     pointer-events: none;
+  }
+  .stone {
+    filter: ${theme.stoneShadow ? "url(#stone-shadow)" : "none"};
   }
   .stone-black {
     fill: ${theme.blackStoneFill};

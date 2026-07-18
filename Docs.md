@@ -168,6 +168,29 @@ board draws that isn't independently attribute-driven:
   [neofanaroio.vercel.app](https://neofanaroio.vercel.app/posts/ing-cup-suicide)):
   a plain white board, solid black/white stones with a bold black
   outline, no gradients.
+- `"gomagic"` — a brighter, more saturated gold board with raised
+  stones that cast a soft drop shadow, modeled on Go Magic's
+  Sabaki-inspired board theme. The shadow (an SVG `feDropShadow`
+  filter) applies to whatever's rendering the stone, including a
+  `black-stone`/`white-stone` custom image, not just the default
+  gradient circles.
+
+Five more themes are ported from
+[Sabaki's theme directory](https://github.com/SabakiHQ/Sabaki/blob/master/docs/guides/theme-directory.md),
+each using real image assets (stone images and/or a board texture)
+rather than flat colors or gradients:
+
+- `"photorealistic"` — photographic-textured stones on the default
+  wood board ([SabakiHQ/theme-photorealistic](https://github.com/SabakiHQ/theme-photorealistic)).
+- `"happy-stones"` — glossy glass stones on a pine board
+  ([upsided/upsided-sabaki-themes](https://github.com/upsided/upsided-sabaki-themes)).
+- `"hikaru"` — a crisp all-SVG board and stones with an anime feel
+  (same source).
+- `"baduktv"` — styled for broadcast, glass stones on a smooth pale
+  board (same source).
+- `"battsgo"` — a fan theme using Twitch chat emotes as stones on a
+  redwood board with gold ink
+  ([JJscott/BattsGo](https://github.com/JJscott/BattsGo)).
 
 An unrecognized `theme` value falls back to `"wood"`.
 `black-stone`/`white-stone`/`background-image` still override the
@@ -176,6 +199,17 @@ active theme's stone/board appearance when set — themes only supply
 before `theme` existed. Markup contrast coloring (light-on-black-stone,
 dark-on-white-stone-or-empty — see "SGF setup stones and markup"
 below) also follows the active theme.
+
+The five image-based themes above point at files under
+`public/assets/themes/<theme>/` (with source/license notes in
+`public/assets/themes/NOTICE.md`) — that's how they resolve inside
+*this* project's own demo. Using one of them outside this project
+means either hosting copies of those same files at a matching
+`/assets/themes/<theme>/...` path on your own site, or skipping the
+theme's built-in image default entirely by setting
+`black-stone`/`white-stone`/`background-image` yourself to wherever
+you've hosted copies — the same tradeoff as any other attribute that
+takes a URL.
 
 ### Fonts
 

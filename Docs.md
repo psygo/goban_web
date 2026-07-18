@@ -184,22 +184,25 @@ the document" fallback for discovery.
 
 ## `<go-metadata-container>`
 
-Displays the loaded SGF's game info as a card, decomposed into three
-parts:
+Displays the loaded SGF's game info as two stacked containers:
 
-- A black-player panel and a white-player panel side by side — no
-  "vs" divider between them, the two stone colors already tell them
-  apart — each with a stone-color indicator and name+rank on one line
-  (`PB`/`BR`, `PW`/`WR`).
-- Below them, the rest of the data (toggle off entirely with the
-  `details` attribute, see below): a meta line with komi/date/event
-  (`KM`/`DT`/`GN`) **each on their own line**, the game result (`RE`)
-  — hidden by default behind a **"Show result"** toggle button (click
-  again to hide it), so replaying an SGF move by move doesn't spoil
-  the outcome unless you ask for it — and, only when present, the
-  **current move's comment** (`C` property of the node at
-  `board.moveIndex`). The comment updates live as you navigate; it
-  appears/disappears per move, since most nodes won't have one.
+- A players row: a black-player panel and a white-player panel side by
+  side — no "vs" divider between them, the two stone colors already
+  tell them apart — each with a stone-color indicator and name+rank on
+  one line (`PB`/`BR`, `PW`/`WR`).
+- Right below it, its own separate card for the rest of the data
+  (toggle it off entirely with the `details` attribute, see below): a
+  meta line with komi/date/event (`KM`/`DT`/`GN`) **each on their own
+  line**, the game result (`RE`) — hidden by default behind a **"Show
+  result"** toggle button (click again to hide it), so replaying an
+  SGF move by move doesn't spoil the outcome unless you ask for it —
+  and, only when present, the **current move's comment** (`C` property
+  of the node at `board.moveIndex`). The comment updates live as you
+  navigate; it appears/disappears per move, since most nodes won't
+  have one.
+
+Colors adapt to `prefers-color-scheme: light` automatically (no
+attribute needed) — see "Theming" below.
 
 Shows "No game loaded." until its `<go-board>` fires `sgf-loaded`.
 Read-only — never calls back into the board. The result's reveal state
@@ -224,12 +227,14 @@ line ends). It ships a default icon-button UI (first/back-10/previous/
 play-all/next/forward-10/last), laid out as a 3-column row — the
 buttons stay centered as a group regardless of the container's width,
 and a move counter (just `"{index} / {count}"`, no "Move" prefix) is
-pinned to the right edge — but it's a **wrapper**, not a fixed widget:
-place your own markup inside it and that replaces the default UI
-entirely — this uses native `<slot>` fallback-content semantics (the
-default buttons are the `<slot>`'s fallback content, which stops
-rendering the moment the slot has any assigned children), so there's
-no configuration flag to toggle, just put elements inside it.
+pinned to the right edge; its colors adapt to `prefers-color-scheme:
+light` automatically (see "Theming" below) — but it's a **wrapper**,
+not a fixed widget: place your own markup inside it and that replaces
+the default UI entirely — this uses native `<slot>` fallback-content
+semantics (the default buttons are the `<slot>`'s fallback content,
+which stops rendering the moment the slot has any assigned children),
+so there's no configuration flag to toggle, just put elements inside
+it.
 
 Tag your elements so `<go-board-controls>` knows what they're for:
 
@@ -341,6 +346,29 @@ customize it (e.g. restyle, add a Restart button, or drop an action):
 
 Attributes: `board` (optional, see "Component architecture" above).
 
+## Theming
+
+`<go-metadata-container>` and `<go-board-controls>` follow the
+viewer's OS/browser color scheme automatically via a
+`prefers-color-scheme: light` media query internally — no attribute or
+setup needed, and no JavaScript is involved. `<go-board>` itself
+doesn't need a light/dark variant: its wood-toned palette and dark
+grid lines already read fine against either a light or dark page
+background (see the demo, which sets its own light/dark body via the
+same media query).
+
+Each component exposes its colors as CSS custom properties (with the
+dark-mode values as the defaults, overridden under
+`prefers-color-scheme: light`) scoped to its own shadow root, in case
+you want to override specific colors from outside — e.g.
+`go-metadata-container { --go-meta-panel-black-bg: #111; }`.
+`<go-metadata-container>`'s properties: `--go-meta-text`,
+`--go-meta-text-secondary`, `--go-meta-text-muted`, `--go-meta-comment`,
+`--go-meta-panel-black-bg`/`-border`, `--go-meta-panel-white-bg`/`-border`,
+`--go-meta-card-bg`/`-border`/`-shadow`, `--go-meta-toggle-bg`/`-bg-hover`/`-border`.
+`<go-board-controls>`'s properties: `--go-controls-btn-bg`/`-bg-hover`/`-color`,
+`--go-controls-btn-playing-bg`, `--go-controls-counter`.
+
 ## `Board` (rules engine)
 
 `src/core/board.ts` — framework-free game-state engine consumed by
@@ -427,8 +455,9 @@ centered as a group with a right-pinned move counter (tag your own
 markup with `data-go-action`/`data-go-counter`; first/back-10/previous/
 next/forward-10/last/play-all/restart actions available), and a
 `<go-metadata-container>` with black/white player panels, a
-toggleable (`details="false"`) info section, a spoiler-hidden result,
-and live per-move comments.
+toggleable (`details="false"`) info card, a spoiler-hidden result, and
+live per-move comments — plus automatic light/dark theming
+(`prefers-color-scheme`) for both peripheral components.
 
 Not yet implemented: scoring (territory counting), positional superko,
 handicap stones, SGF variation navigation/export, undo for

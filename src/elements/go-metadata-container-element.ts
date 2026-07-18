@@ -6,6 +6,38 @@ const STYLES = `
   :host {
     display: block;
     font-family: system-ui, sans-serif;
+    --go-meta-text: #eee;
+    --go-meta-text-secondary: #999;
+    --go-meta-text-muted: #888;
+    --go-meta-comment: #ccc;
+    --go-meta-panel-black-bg: rgba(0, 0, 0, 0.28);
+    --go-meta-panel-black-border: rgba(255, 255, 255, 0.06);
+    --go-meta-panel-white-bg: rgba(255, 255, 255, 0.07);
+    --go-meta-panel-white-border: rgba(255, 255, 255, 0.1);
+    --go-meta-card-bg: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
+    --go-meta-card-border: rgba(255, 255, 255, 0.09);
+    --go-meta-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+    --go-meta-toggle-bg: rgba(255, 255, 255, 0.08);
+    --go-meta-toggle-bg-hover: rgba(255, 255, 255, 0.14);
+    --go-meta-toggle-border: rgba(255, 255, 255, 0.12);
+  }
+  @media (prefers-color-scheme: light) {
+    :host {
+      --go-meta-text: #1a1a1a;
+      --go-meta-text-secondary: #666;
+      --go-meta-text-muted: #767676;
+      --go-meta-comment: #444;
+      --go-meta-panel-black-bg: rgba(0, 0, 0, 0.08);
+      --go-meta-panel-black-border: rgba(0, 0, 0, 0.14);
+      --go-meta-panel-white-bg: rgba(0, 0, 0, 0.03);
+      --go-meta-panel-white-border: rgba(0, 0, 0, 0.12);
+      --go-meta-card-bg: linear-gradient(180deg, rgba(0, 0, 0, 0.035), rgba(0, 0, 0, 0.015));
+      --go-meta-card-border: rgba(0, 0, 0, 0.1);
+      --go-meta-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      --go-meta-toggle-bg: rgba(0, 0, 0, 0.06);
+      --go-meta-toggle-bg-hover: rgba(0, 0, 0, 0.1);
+      --go-meta-toggle-border: rgba(0, 0, 0, 0.14);
+    }
   }
   /* The plain [hidden] UA-stylesheet rule loses to any author rule that
      sets "display" on the same element (e.g. ".card { display: flex }"),
@@ -17,19 +49,13 @@ const STYLES = `
   }
   .empty {
     margin: 0;
-    color: #888;
+    color: var(--go-meta-text-muted);
     font-size: 0.9rem;
   }
   .card {
     display: flex;
     flex-direction: column;
-    gap: 0.75rem;
-    padding: 0.85rem 1rem;
-    background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0.02));
-    border: 1px solid rgba(255, 255, 255, 0.09);
-    border-radius: 10px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    box-sizing: border-box;
+    gap: 0.6rem;
   }
   .players {
     display: flex;
@@ -47,12 +73,12 @@ const STYLES = `
     box-sizing: border-box;
   }
   .player-panel-black {
-    background: rgba(0, 0, 0, 0.28);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: var(--go-meta-panel-black-bg);
+    border: 1px solid var(--go-meta-panel-black-border);
   }
   .player-panel-white {
-    background: rgba(255, 255, 255, 0.07);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--go-meta-panel-white-bg);
+    border: 1px solid var(--go-meta-panel-white-border);
   }
   .stone-dot {
     width: 1rem;
@@ -75,7 +101,7 @@ const STYLES = `
     gap: 0.35rem;
   }
   .player-name {
-    color: #eee;
+    color: var(--go-meta-text);
     font-weight: 600;
     font-size: 0.9rem;
     overflow: hidden;
@@ -83,19 +109,23 @@ const STYLES = `
     white-space: nowrap;
   }
   .player-rank {
-    color: #999;
+    color: var(--go-meta-text-secondary);
     font-size: 0.75rem;
     flex: none;
   }
   .details {
     display: flex;
     flex-direction: column;
-    gap: 0.3rem;
-    padding-top: 0.6rem;
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    gap: 0.35rem;
+    padding: 0.65rem 0.85rem;
+    background: var(--go-meta-card-bg);
+    border: 1px solid var(--go-meta-card-border);
+    border-radius: 10px;
+    box-shadow: var(--go-meta-card-shadow);
+    box-sizing: border-box;
   }
   .meta-line {
-    color: #999;
+    color: var(--go-meta-text-secondary);
     font-size: 0.85rem;
   }
   .result-line {
@@ -106,23 +136,23 @@ const STYLES = `
   .result-toggle {
     font: inherit;
     font-size: 0.75rem;
-    color: #ccc;
-    background: rgba(255, 255, 255, 0.08);
-    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--go-meta-text-secondary);
+    background: var(--go-meta-toggle-bg);
+    border: 1px solid var(--go-meta-toggle-border);
     border-radius: 999px;
     padding: 0.2rem 0.65rem;
     cursor: pointer;
   }
   .result-toggle:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--go-meta-toggle-bg-hover);
   }
   .result-value {
-    color: #eee;
+    color: var(--go-meta-text);
     font-size: 0.85rem;
     font-weight: 600;
   }
   .comment {
-    color: #ccc;
+    color: var(--go-meta-comment);
     font-size: 0.85rem;
     line-height: 1.4;
     white-space: pre-wrap;
@@ -130,17 +160,21 @@ const STYLES = `
 `;
 
 /**
- * `<go-metadata-container>` — displays the loaded SGF's game info as a
- * card, decomposed into three parts: a black-player panel and a
- * white-player panel (stone-color indicator, name and rank on one line)
- * side by side — no "vs" divider between them, the two stone colors are
- * distinction enough — and below them the rest of the data: komi/date/event
- * each on their own line, the game result (hidden behind a "Show result"
- * toggle by default, since a spoiler-visible result isn't always wanted
- * alongside an SGF being replayed move by move), and the *current* move's
- * comment (SGF `C` property), which updates live as the board navigates.
- * Shows "No game loaded." until its `<go-board>` fires `sgf-loaded`.
- * Read-only — never calls back into the board.
+ * `<go-metadata-container>` — displays the loaded SGF's game info,
+ * decomposed into two stacked containers: a players row (a black-player
+ * panel and a white-player panel — stone-color indicator, name and rank on
+ * one line — side by side, no "vs" divider, the two stone colors are
+ * distinction enough) and, right below it, its own separate card for the
+ * rest of the data: komi/date/event each on their own line, the game
+ * result (hidden behind a "Show result" toggle by default, since a
+ * spoiler-visible result isn't always wanted alongside an SGF being
+ * replayed move by move), and the *current* move's comment (SGF `C`
+ * property), which updates live as the board navigates. Shows "No game
+ * loaded." until its `<go-board>` fires `sgf-loaded`. Read-only — never
+ * calls back into the board.
+ *
+ * Colors adapt to `prefers-color-scheme: light` automatically — no
+ * attribute needed.
  *
  * The result reveal state resets (hides again) whenever a new game loads,
  * but is left alone across move navigation.
@@ -151,8 +185,8 @@ const STYLES = `
  * Attributes:
  *   - `board` (optional element id of the `<go-board>` to read from;
  *     otherwise the nearest one is located automatically)
- *   - `details` — set to `"false"` to hide everything below the player
- *     panels (meta line, result, comment), showing just the two players
+ *   - `details` — set to `"false"` to hide the second card (meta line,
+ *     result, comment) entirely, showing just the players row
  */
 export class GoMetadataContainerElement extends HTMLElement {
   static get observedAttributes(): string[] {

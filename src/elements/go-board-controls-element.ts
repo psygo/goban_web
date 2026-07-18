@@ -12,6 +12,20 @@ const STYLES = `
   :host {
     display: block;
     font-family: system-ui, sans-serif;
+    --go-controls-btn-bg: #3a3a3a;
+    --go-controls-btn-bg-hover: #4a4a4a;
+    --go-controls-btn-color: #eee;
+    --go-controls-btn-playing-bg: #7a3a3a;
+    --go-controls-counter: #bbb;
+  }
+  @media (prefers-color-scheme: light) {
+    :host {
+      --go-controls-btn-bg: #e6e4e0;
+      --go-controls-btn-bg-hover: #d8d5cf;
+      --go-controls-btn-color: #2a2a2a;
+      --go-controls-btn-playing-bg: #f0c2c2;
+      --go-controls-counter: #666;
+    }
   }
   .default-controls {
     display: grid;
@@ -34,36 +48,37 @@ const STYLES = `
     padding: 0;
     border: none;
     border-radius: 999px;
-    background: #3a3a3a;
-    color: #eee;
+    background: var(--go-controls-btn-bg);
+    color: var(--go-controls-btn-color);
     cursor: pointer;
   }
   .default-controls button:hover:not([data-go-disabled]) {
-    background: #4a4a4a;
+    background: var(--go-controls-btn-bg-hover);
   }
   .default-controls button[data-go-disabled] {
     opacity: 0.3;
     cursor: default;
   }
   .default-controls button[data-go-action="play-all"][data-go-playing] {
-    background: #7a3a3a;
+    background: var(--go-controls-btn-playing-bg);
   }
   .default-counter {
     grid-column: 3;
     justify-self: end;
     font-variant-numeric: tabular-nums;
-    color: #bbb;
+    color: var(--go-controls-counter);
     font-size: 0.85rem;
   }
 `;
 
 /**
  * `<go-board-controls>` — wires Previous / Next / Play-all / Restart
- * behavior to its associated `<go-board>`. Ships a default button UI, but
- * is meant to be overridden: place your own markup inside it (native
- * `<slot>` fallback-content semantics mean any light-DOM children you add
- * replace the default UI entirely), tagged so this element knows what
- * they're for:
+ * behavior to its associated `<go-board>`. Ships a default button UI (its
+ * colors adapt to `prefers-color-scheme: light` automatically — no
+ * attribute needed), but is meant to be overridden: place your own markup
+ * inside it (native `<slot>` fallback-content semantics mean any light-DOM
+ * children you add replace the default UI entirely), tagged so this
+ * element knows what they're for:
  *
  *   - `data-go-action="first" | "back-10" | "previous" | "next" |
  *     "forward-10" | "last" | "play-all" | "restart"` on any clickable

@@ -148,7 +148,7 @@ const STYLES = `
   }
   .player-rank {
     color: var(--go-meta-text-secondary);
-    font-size: 0.75rem;
+    font-size: 0.9rem;
     flex: none;
   }
   .details {
@@ -293,7 +293,12 @@ export class GoMetadataContainerElement extends HTMLElement {
   }
 
   attributeChangedCallback(): void {
-    if (this.isConnected) this.render();
+    // Not `this.isConnected`: for an attribute already present when this
+    // element is parsed (e.g. `details="false"` in the initial HTML),
+    // attributeChangedCallback fires during upgrade *before*
+    // connectedCallback — at which point the element is already
+    // connected, but the shadow DOM refs below don't exist yet.
+    if (this.shadowRoot) this.render();
   }
 
   connectedCallback(): void {
@@ -441,11 +446,11 @@ function fieldText(field: Field | null, info: GoGameInfo | null, resultRevealed:
     case "black-name":
       return info.black.name;
     case "black-rank":
-      return info.black.rank ? `(${info.black.rank})` : "";
+      return info.black.rank ?? "";
     case "white-name":
       return info.white.name;
     case "white-rank":
-      return info.white.rank ? `(${info.white.rank})` : "";
+      return info.white.rank ?? "";
     case "komi":
       return info.komi ?? "";
     case "date":

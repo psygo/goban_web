@@ -152,4 +152,40 @@ describe("Board", () => {
     board.pass();
     expect(board.isOver).toBe(false);
   });
+
+  describe("set", () => {
+    it("directly places a stone without affecting turn order", () => {
+      const board = new Board(9);
+      board.set(4, 4, Color.White);
+      expect(board.get(4, 4)).toBe(Color.White);
+      expect(board.currentColor).toBe(Color.Black);
+    });
+
+    it("bypasses suicide/capture rules — setup stones aren't gameplay", () => {
+      const board = new Board(9);
+      // Fully surround (1,1) with black via set(), same shape as the
+      // suicide test above, but set() should let a white stone sit there
+      // anyway since it's not subject to capture/suicide checking.
+      board.set(1, 0, Color.Black);
+      board.set(0, 1, Color.Black);
+      board.set(2, 1, Color.Black);
+      board.set(1, 2, Color.Black);
+      board.set(1, 1, Color.White);
+      expect(board.get(1, 1)).toBe(Color.White);
+    });
+
+    it("can directly remove a stone (AE semantics) by setting it to Empty", () => {
+      const board = new Board(9);
+      board.set(4, 4, Color.Black);
+      expect(board.get(4, 4)).toBe(Color.Black);
+      board.set(4, 4, Color.Empty);
+      expect(board.get(4, 4)).toBe(Color.Empty);
+    });
+
+    it("ignores out-of-bounds coordinates", () => {
+      const board = new Board(9);
+      expect(() => board.set(-1, 0, Color.Black)).not.toThrow();
+      expect(() => board.set(9, 9, Color.Black)).not.toThrow();
+    });
+  });
 });

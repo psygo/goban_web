@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { SGFParseError, isSGFPass, parseSGF, sgfPointToVertex } from "../src/core/sgf";
+import {
+  SGFParseError,
+  isSGFPass,
+  parseSGF,
+  parseSGFLabel,
+  sgfPointToVertex,
+  sgfPointsForProperty,
+} from "../src/core/sgf";
+import type { SGFNode } from "../src/core/sgf";
 
 describe("parseSGF", () => {
   it("parses a single node with multiple properties", () => {
@@ -110,5 +118,49 @@ describe("isSGFPass", () => {
 
   it("does not treat a real point as a pass", () => {
     expect(isSGFPass("pd", 19)).toBe(false);
+  });
+});
+
+describe("sgfPointsForProperty", () => {
+  it("converts every value of a point-list property to vertices", () => {
+    const [tree] = parseSGF("(;AB[aa][pd][ss])");
+    const node = tree!.nodes[0]!;
+    expect(sgfPointsForProperty(node, "AB")).toEqual([
+      { x: 0, y: 0 },
+      { x: 15, y: 3 },
+      { x: 18, y: 18 },
+    ]);
+  });
+
+  it("returns an empty array when the property is absent", () => {
+    const node: SGFNode = { properties: {} };
+    expect(sgfPointsForProperty(node, "AW")).toEqual([]);
+  });
+
+  it("skips values that aren't valid two-letter points", () => {
+    const node: SGFNode = { properties: { AE: ["aa", "", "bogus"] } };
+    expect(sgfPointsForProperty(node, "AE")).toEqual([{ x: 0, y: 0 }]);
+  });
+});
+
+describe("parseSGFLabel", () => {
+  it("splits a point and its label text", () => {
+    expect(parseSGFLabel("pd:A")).toEqual({ vertex: { x: 15, y: 3 }, text: "A" });
+  });
+
+  it("supports multi-character and numeric label text", () => {
+    expect(parseSGFLabel("aa:12")).toEqual({ vertex: { x: 0, y: 0 }, text: "12" });
+  });
+
+  it("allows a colon within the label text itself (splits on the first colon)", () => {
+    expect(parseSGFLabel("aa:a:b")).toEqual({ vertex: { x: 0, y: 0 }, text: "a:b" });
+  });
+
+  it("returns null when there's no colon", () => {
+    expect(parseSGFLabel("pd")).toBeNull();
+  });
+
+  it("returns null when the point half isn't a valid two-letter point", () => {
+    expect(parseSGFLabel("bogus:A")).toBeNull();
   });
 });

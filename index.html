@@ -101,7 +101,11 @@
         color: #1a1a1a;
       }
       main {
-        width: min(640px, 90vw);
+        /* No explicit width: shrinks to fit its widest child, which is
+         * go-board-container — itself sized by <go-board>'s own
+         * width/height attributes. This keeps .title-row (100% of main)
+         * exactly as wide as the board, instead of an arbitrary cap. */
+        max-width: 90vw;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -195,7 +199,7 @@
       <go-board-container>
         <go-metadata-container details="false"></go-metadata-container>
         <go-board
-          sgf="/assets/ing_cup_rules_1.sgf"
+          sgf="/assets/ing_cup_rules_4.sgf"
           black-stone="/assets/black-stone.svg"
           white-stone="/assets/white-stone.svg"
           background-image="/assets/board-background.svg"
@@ -204,7 +208,7 @@
           coordinates="none"
           coordinates-gap="15px"
           coordinates-font-size="10pt"
-          padding="12px"
+          padding="16px"
         ></go-board>
         <go-board-controls counter="false"></go-board-controls>
       </go-board-container>

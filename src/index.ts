@@ -7,7 +7,14 @@ export type {
   PlayResult,
   Vertex,
 } from "./core/types";
-export { SGFParseError, isSGFPass, parseSGF, sgfPointToVertex } from "./core/sgf";
+export {
+  SGFParseError,
+  isSGFPass,
+  parseSGF,
+  parseSGFLabel,
+  sgfPointToVertex,
+  sgfPointsForProperty,
+} from "./core/sgf";
 export type { SGFGameTree, SGFNode, SGFProperties } from "./core/sgf";
 
 // Registration order matters: `go-board` must be defined before the

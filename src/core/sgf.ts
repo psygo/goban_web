@@ -182,6 +182,35 @@ export function isSGFPass(value: string, boardSize: number): boolean {
   return value === "" || (boardSize <= 19 && value === "tt");
 }
 
+/**
+ * Converts a node's list of point values for a given property (e.g. the
+ * setup properties `AB`/`AW`/`AE`, or the point-list markup properties
+ * `TR`/`SQ`/`CR`/`MA`) to vertices, silently skipping any value that
+ * isn't a valid two-letter point. Missing property returns `[]`.
+ */
+export function sgfPointsForProperty(node: SGFNode, id: string): Vertex[] {
+  const values = node.properties[id];
+  if (!values) return [];
+  const vertices: Vertex[] = [];
+  for (const value of values) {
+    const vertex = sgfPointToVertex(value);
+    if (vertex) vertices.push(vertex);
+  }
+  return vertices;
+}
+
+/**
+ * Splits a single `LB` value (`"xy:text"`) into its point and label text.
+ * Returns `null` if `value` isn't a two-letter point followed by `:`.
+ */
+export function parseSGFLabel(value: string): { vertex: Vertex; text: string } | null {
+  const separator = value.indexOf(":");
+  if (separator === -1) return null;
+  const vertex = sgfPointToVertex(value.slice(0, separator));
+  if (!vertex) return null;
+  return { vertex, text: value.slice(separator + 1) };
+}
+
 function sgfCharToIndex(char: string): number | null {
   const code = char.charCodeAt(0);
   if (code >= 97 && code <= 122) return code - 97; // a-z -> 0-25

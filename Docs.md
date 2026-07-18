@@ -119,6 +119,33 @@ and steps through an SGF game record.
 - `keyboard-shortcuts` — set to `"false"` to disable arrow-key SGF
   navigation (see "Keyboard navigation" below).
 
+### SGF setup stones and markup
+
+Beyond `B`/`W` moves, a loaded `sgf` also understands:
+
+- `AB` / `AW` / `AE` (add-black / add-white / add-empty) — setup
+  stones, placed or removed directly (no capture/suicide/ko rules,
+  since they're not gameplay — see `Board.set`) rather than played.
+  Common on the *root* node for handicap games or "diagram" SGFs that
+  are nothing but a setup position with no moves at all (a single-node
+  tree, `AB`/`AW` and nothing else) — these are fully supported; the
+  root's setup is applied before move 0 rather than silently ignored.
+  Like moves, setup stones accumulate as you navigate forward and are
+  rebuilt from scratch (root included) on every `goToMove`/`nextMove`/
+  `previousMove` call, so they stay correct at any position.
+- `LB` (text labels, e.g. `LB[pd:A]` or `LB[pd:12]` — any text, not
+  just single letters) and the point-shape markup properties `TR`
+  (triangle), `SQ` (square), `CR` (circle), `MA` (cross) are drawn as
+  an overlay on top of the grid/stones at their point. Unlike setup
+  stones, these are read fresh from *only* the current node
+  (`sgfTree.nodes[moveIndex]`) on every render — not accumulated —
+  since they conventionally annotate one specific position rather than
+  persisting as the game continues; they disappear on the next move
+  unless that node repeats them. Mark color automatically contrasts
+  with whatever's underneath (light on a black stone, dark on a white
+  stone or empty point). Respects `x-start`/`x-end`/`y-start`/`y-end`
+  cropping like everything else.
+
 ### Properties & methods
 
 - `board.board` — the underlying `Board` rules-engine instance (read-only)
@@ -445,6 +472,10 @@ or headless play).
 - `board.play(x, y)` → `MoveResult` (`{ legal: true, vertex, color, captured }`
   or `{ legal: false, reason }`, `reason` one of `occupied`, `suicide`,
   `ko`, `out-of-bounds`, `game-over`)
+- `board.set(x, y, color)` — directly sets a point, bypassing capture/
+  suicide/ko rules and turn order entirely. For SGF setup properties
+  (`AB`/`AW`/`AE`) or board-editing tools, not gameplay — use `play()`
+  for that.
 - `board.isLegalMove(x, y, color?)` → `boolean`
 - `board.pass()`, `board.isOver`, `board.currentColor`, `board.captures`,
   `board.koPoint`, `board.clone()`
@@ -484,6 +515,15 @@ isSGFPass("", 19) // true
   coordinates; `null` if the value isn't a two-letter point.
 - `isSGFPass(value: string, boardSize: number): boolean` — true for an
   empty value (FF[4] pass), or `"tt"` on boards up to 19×19 (FF[3] pass).
+- `sgfPointsForProperty(node: SGFNode, id: string): Vertex[]` —
+  converts every value of a point-list property (e.g. `AB`/`AW`/`AE`,
+  or the point-shape markup properties `TR`/`SQ`/`CR`/`MA`) to
+  vertices, skipping any value that isn't a valid point. `[]` if the
+  node doesn't have that property.
+- `parseSGFLabel(value: string): { vertex: Vertex, text: string } | null`
+  — splits a single `LB` value (`"pd:A"`) into its point and label
+  text (split on the *first* colon, so the text itself may contain
+  one); `null` if there's no colon or the point half isn't valid.
 
 Not yet implemented: variation navigation, SGF serialization/writing,
 and property-specific typed accessors (e.g. reading `SZ`/`KM`/`RE` as
@@ -529,8 +569,12 @@ result, and live per-move comments — plus automatic light/dark theming
 (`prefers-color-scheme`) for both peripheral components, with a
 `--goban-*` CSS custom property layer that lets a page force a theme
 regardless of OS preference (see "Theming"; the demo's title-row
-sun/moon button does exactly this).
+sun/moon button does exactly this). Also implemented: SGF setup stones
+(`AB`/`AW`/`AE`, including root-node-only "diagram" SGFs with no
+moves at all — e.g. handicap/problem positions) and markup (`LB` text
+labels, `TR`/`SQ`/`CR`/`MA` point shapes), rendered as an overlay
+scoped to the current node.
 
 Not yet implemented: scoring (territory counting), positional superko,
-handicap stones, SGF variation navigation/export, undo for
-interactively-played (non-SGF) moves, themed hover-preview stone.
+SGF variation navigation/export, undo for interactively-played
+(non-SGF) moves, themed hover-preview stone.

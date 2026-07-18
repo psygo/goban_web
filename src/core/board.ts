@@ -50,6 +50,16 @@ export class Board {
     return this.grid[this.toIndex(x, y)] as Color;
   }
 
+  /**
+   * Directly sets a point's color, bypassing capture/suicide/ko rules and
+   * turn order. For SGF setup properties (`AB`/`AW`/`AE`) or board-editing
+   * tools — not gameplay, which should go through `play()` instead.
+   */
+  set(x: number, y: number, color: Color): void {
+    if (!this.inBounds(x, y)) return;
+    this.grid[this.toIndex(x, y)] = color;
+  }
+
   clone(): Board {
     const copy = new Board(this.size);
     copy.grid = this.grid.slice();

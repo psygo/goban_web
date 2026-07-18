@@ -1,5 +1,5 @@
 import { Board } from "../core/board";
-import { isSGFPass, parseSGF, sgfPointToVertex } from "../core/sgf";
+import { isSGFPass, parseSGF, parseSGFLabel, sgfPointsForProperty, sgfPointToVertex } from "../core/sgf";
 import { Color } from "../core/types";
 import type { SGFGameTree, SGFNode } from "../core/sgf";
 import type { Vertex } from "../core/types";
@@ -48,6 +48,16 @@ const STAR_RADIUS = 0.09;
 // intersection, signaling "the board continues past what's shown" instead of
 // looking like a smaller full board.
 const CROP_BLEED = 0.4;
+
+type MarkupShape = "triangle" | "square" | "circle" | "cross";
+// SGF point-list markup properties, each rendered as the given shape.
+const MARKUP_SHAPES: Record<string, MarkupShape> = {
+  TR: "triangle",
+  SQ: "square",
+  CR: "circle",
+  MA: "cross",
+};
+const MARK_RADIUS = STONE_RADIUS * 0.55;
 
 interface BoardLayout {
   size: number;
@@ -212,6 +222,7 @@ export class GoBoardElement extends HTMLElement {
   private _board: Board;
   private svg!: SVGSVGElement;
   private stonesGroup!: SVGGElement;
+  private markupGroup!: SVGGElement;
   private ghostStone!: SVGCircleElement;
   private hovered: Vertex | null = null;
 
@@ -579,6 +590,11 @@ export class GoBoardElement extends HTMLElement {
 
     const size = this._board.size;
     this._board = new Board(size);
+    // The root node (`nodes[0]`) is excluded from `_sgfMainLine` (see
+    // `loadSgf`) but can itself carry setup stones (AB/AW/AE) — a
+    // single-node "diagram" SGF with no actual moves is nothing *but*
+    // that. Always apply it first so that setup isn't silently dropped.
+    this.applySgfNode(this._sgfTree!.nodes[0]!);
     for (let i = 0; i < clamped; i++) {
       this.applySgfNode(this._sgfMainLine[i]!);
     }
@@ -594,10 +610,21 @@ export class GoBoardElement extends HTMLElement {
     );
   }
 
+  /**
+   * Applies one SGF node's board-affecting properties: setup stones
+   * (`AB`/`AW`/`AE`, placed directly via `Board.set` — no capture/suicide/
+   * ko rules, per the SGF spec) followed by a move (`B`/`W`, played via
+   * `Board.play`), if present. A node commonly has only one or the other,
+   * but both are handled since the spec permits either independently.
+   */
   private applySgfNode(node: SGFNode): void {
+    for (const { x, y } of sgfPointsForProperty(node, "AB")) this._board.set(x, y, Color.Black);
+    for (const { x, y } of sgfPointsForProperty(node, "AW")) this._board.set(x, y, Color.White);
+    for (const { x, y } of sgfPointsForProperty(node, "AE")) this._board.set(x, y, Color.Empty);
+
     const color =
       "B" in node.properties ? Color.Black : "W" in node.properties ? Color.White : null;
-    if (color === null) return; // setup-only node (e.g. AB/AW), nothing to replay
+    if (color === null) return;
 
     const value = node.properties[color === Color.Black ? "B" : "W"]?.[0] ?? "";
     if (isSGFPass(value, this._board.size)) {
@@ -627,7 +654,14 @@ export class GoBoardElement extends HTMLElement {
       this._sgfTree = tree;
       this._sgfMainLine = tree.nodes.slice(1);
       this._moveIndex = 0;
-      this.reset(size);
+      // Not `this.reset(size)`: the root node can itself carry setup
+      // stones (AB/AW/AE) that must be applied before the first render —
+      // a single-node "diagram" SGF is nothing but that.
+      this._board = new Board(size);
+      this.hovered = null;
+      this.applySgfNode(root);
+      this.buildSvg();
+      this.render();
 
       this.dispatchEvent(
         new CustomEvent<SGFLoadedEventDetail>("sgf-loaded", {
@@ -785,12 +819,14 @@ export class GoBoardElement extends HTMLElement {
         <g class="star-points" fill="#453017">${starMarkup}</g>
         ${coordMarkup}
         <g class="stones"></g>
+        <g class="markup"></g>
         <circle class="ghost-stone" r="${STONE_RADIUS}" visibility="hidden" />
       </svg>
     `;
 
     this.svg = this.shadowRoot!.querySelector("svg") as SVGSVGElement;
     this.stonesGroup = this.shadowRoot!.querySelector(".stones") as SVGGElement;
+    this.markupGroup = this.shadowRoot!.querySelector(".markup") as SVGGElement;
     this.ghostStone = this.shadowRoot!.querySelector(".ghost-stone") as SVGCircleElement;
 
     // Built via DOM APIs (not string-interpolated into the markup above) so
@@ -850,7 +886,8 @@ export class GoBoardElement extends HTMLElement {
   private render(): void {
     if (!this.stonesGroup) return;
     this.stonesGroup.replaceChildren();
-    const { xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = this.computeLayout();
+    const layout = this.computeLayout();
+    const { xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = layout;
     for (let y = yStart; y <= yEnd; y++) {
       for (let x = xStart; x <= xEnd; x++) {
         const color = this._board.get(x, y);
@@ -858,7 +895,116 @@ export class GoBoardElement extends HTMLElement {
         this.stonesGroup.appendChild(this.createStone(x, y, color, gridOffsetX, gridOffsetY));
       }
     }
+    this.renderMarkup(layout);
     this.updateGhostStone();
+  }
+
+  /**
+   * Draws the *current* SGF node's markup — `TR`/`SQ`/`CR`/`MA` point
+   * shapes and `LB` text labels — read fresh from `nodes[moveIndex]` each
+   * call rather than accumulated across moves like setup stones, since
+   * markup conventionally annotates one specific position, not the game
+   * going forward.
+   */
+  private renderMarkup(layout: BoardLayout): void {
+    if (!this.markupGroup) return;
+    this.markupGroup.replaceChildren();
+    const node = this._sgfTree?.nodes[this._moveIndex];
+    if (!node) return;
+
+    const { xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = layout;
+    const inCrop = (v: Vertex): boolean => v.x >= xStart && v.x <= xEnd && v.y >= yStart && v.y <= yEnd;
+
+    for (const [propertyId, shape] of Object.entries(MARKUP_SHAPES)) {
+      for (const vertex of sgfPointsForProperty(node, propertyId)) {
+        if (!inCrop(vertex)) continue;
+        this.markupGroup.appendChild(this.createMark(shape, vertex.x, vertex.y, gridOffsetX, gridOffsetY));
+      }
+    }
+
+    for (const raw of node.properties["LB"] ?? []) {
+      const label = parseSGFLabel(raw);
+      if (!label || !inCrop(label.vertex)) continue;
+      this.markupGroup.appendChild(
+        this.createLabel(label.text, label.vertex.x, label.vertex.y, gridOffsetX, gridOffsetY),
+      );
+    }
+  }
+
+  /** A light mark reads on a black stone, a dark one on a white stone or empty point/wood. */
+  private markColorAt(x: number, y: number): string {
+    return this._board.get(x, y) === Color.Black ? "#f5f2e9" : "#111111";
+  }
+
+  private createMark(
+    shape: MarkupShape,
+    x: number,
+    y: number,
+    gridOffsetX: number,
+    gridOffsetY: number,
+  ): SVGElement {
+    const cx = gridOffsetX + x;
+    const cy = gridOffsetY + y;
+    const r = MARK_RADIUS;
+    let el: SVGElement;
+    switch (shape) {
+      case "circle":
+        el = document.createElementNS(SVG_NS, "circle");
+        el.setAttribute("cx", String(cx));
+        el.setAttribute("cy", String(cy));
+        el.setAttribute("r", String(r));
+        break;
+      case "square":
+        el = document.createElementNS(SVG_NS, "rect");
+        el.setAttribute("x", String(cx - r));
+        el.setAttribute("y", String(cy - r));
+        el.setAttribute("width", String(r * 2));
+        el.setAttribute("height", String(r * 2));
+        break;
+      case "triangle":
+        el = document.createElementNS(SVG_NS, "polygon");
+        el.setAttribute(
+          "points",
+          [
+            [cx, cy - r],
+            [cx - r * 0.87, cy + r * 0.5],
+            [cx + r * 0.87, cy + r * 0.5],
+          ]
+            .map((point) => point.join(","))
+            .join(" "),
+        );
+        break;
+      case "cross":
+        el = document.createElementNS(SVG_NS, "g");
+        el.appendChild(this.createLine(cx - r * 0.75, cy - r * 0.75, cx + r * 0.75, cy + r * 0.75));
+        el.appendChild(this.createLine(cx - r * 0.75, cy + r * 0.75, cx + r * 0.75, cy - r * 0.75));
+        break;
+    }
+    el.setAttribute("class", "mark");
+    el.setAttribute("stroke", this.markColorAt(x, y));
+    return el;
+  }
+
+  private createLine(x1: number, y1: number, x2: number, y2: number): SVGLineElement {
+    const line = document.createElementNS(SVG_NS, "line") as SVGLineElement;
+    line.setAttribute("x1", String(x1));
+    line.setAttribute("y1", String(y1));
+    line.setAttribute("x2", String(x2));
+    line.setAttribute("y2", String(y2));
+    return line;
+  }
+
+  private createLabel(text: string, x: number, y: number, gridOffsetX: number, gridOffsetY: number): SVGTextElement {
+    const el = document.createElementNS(SVG_NS, "text") as SVGTextElement;
+    el.setAttribute("x", String(gridOffsetX + x));
+    el.setAttribute("y", String(gridOffsetY + y));
+    el.setAttribute("class", "mark-label");
+    el.setAttribute("fill", this.markColorAt(x, y));
+    // .textContent, not innerHTML: label text comes straight from the SGF
+    // file (attacker-controlled if fetched from an untrusted URL) and must
+    // never be interpreted as markup.
+    el.textContent = text;
+    return el;
   }
 
   private stoneImageUrl(color: Color): string | null {
@@ -950,6 +1096,20 @@ const STYLES = `
   .ghost-stone {
     opacity: 0.4;
     pointer-events: none;
+  }
+  .markup {
+    pointer-events: none;
+  }
+  .mark {
+    fill: none;
+    stroke-width: 0.08;
+  }
+  .mark-label {
+    font-family: var(--go-coords-font-family, system-ui, sans-serif);
+    font-size: 0.55px;
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: middle;
   }
 `;
 

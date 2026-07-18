@@ -14,6 +14,13 @@ const STYLES = `
     font-family: system-ui, sans-serif;
   }
   .default-controls {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 0.375rem;
+  }
+  .buttons {
+    grid-column: 2;
     display: flex;
     align-items: center;
     gap: 0.375rem;
@@ -42,7 +49,8 @@ const STYLES = `
     background: #7a3a3a;
   }
   .default-counter {
-    margin-left: 0.375rem;
+    grid-column: 3;
+    justify-self: end;
     font-variant-numeric: tabular-nums;
     color: #bbb;
     font-size: 0.85rem;
@@ -90,6 +98,7 @@ export class GoBoardControlsElement extends HTMLElement {
         <style>${STYLES}</style>
         <slot>
           <div class="default-controls">
+            <div class="buttons">
             <button ${ACTION_ATTR}="first" title="First move" aria-label="First move">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                 <line x1="6" y1="5" x2="6" y2="19" />
@@ -129,7 +138,8 @@ export class GoBoardControlsElement extends HTMLElement {
                 <polyline points="6 6 14 12 6 18" />
               </svg>
             </button>
-            <span class="default-counter" ${COUNTER_ATTR}></span>
+            </div>
+            <span class="default-counter" ${COUNTER_ATTR}="{index} / {count}"></span>
           </div>
         </slot>
       `;

@@ -35,8 +35,6 @@
     <main>
       <h1>goban-web</h1>
       <go-board-container>
-        <go-metadata-container></go-metadata-container>
-        <go-board-controls></go-board-controls>
         <go-board
           sgf="/assets/xu_wenyan_vs_risa_ueno_17_07_2026.sgf"
           black-stone="/assets/black-stone.svg"
@@ -44,11 +42,13 @@
           background-image="/assets/board-background.svg"
           width="480"
           height="480"
-          coordinates="top left bottom right"
+          coordinates="none"
           coordinates-gap="15px"
           coordinates-font-size="10pt"
-          padding="6px"
+          padding="12px"
         ></go-board>
+        <go-board-controls></go-board-controls>
+        <go-metadata-container></go-metadata-container>
       </go-board-container>
     </main>
     <script type="module" src="/src/main.ts"></script>

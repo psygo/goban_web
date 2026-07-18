@@ -187,16 +187,19 @@ the document" fallback for discovery.
 Displays the loaded SGF's game info as a card, decomposed into three
 parts:
 
-- A black-player panel and a white-player panel side by side, each
-  with a stone-color indicator, name (`PB`/`PW`), and rank (`BR`/`WR`).
-- Below them, the rest of the data: a meta line (`KM`/`DT`/`GN`), the
-  game result (`RE`) — hidden by default behind a **"Show result"**
-  toggle button (click again to hide it), so replaying an SGF move by
-  move doesn't spoil the outcome unless you ask for it — and, only
-  when present, the **current move's comment** (`C` property of the
-  node at `board.moveIndex`). The comment updates live as you
-  navigate; it appears/disappears per move, since most nodes won't
-  have one.
+- A black-player panel and a white-player panel side by side — no
+  "vs" divider between them, the two stone colors already tell them
+  apart — each with a stone-color indicator and name+rank on one line
+  (`PB`/`BR`, `PW`/`WR`).
+- Below them, the rest of the data (toggle off entirely with the
+  `details` attribute, see below): a meta line with komi/date/event
+  (`KM`/`DT`/`GN`) **each on their own line**, the game result (`RE`)
+  — hidden by default behind a **"Show result"** toggle button (click
+  again to hide it), so replaying an SGF move by move doesn't spoil
+  the outcome unless you ask for it — and, only when present, the
+  **current move's comment** (`C` property of the node at
+  `board.moveIndex`). The comment updates live as you navigate; it
+  appears/disappears per move, since most nodes won't have one.
 
 Shows "No game loaded." until its `<go-board>` fires `sgf-loaded`.
 Read-only — never calls back into the board. The result's reveal state
@@ -207,20 +210,26 @@ position.
 Listens to `sgf-loaded`, `sgf-error`, and `navigate` on its `<go-board>`
 (the last one is what drives the live comment).
 
-Attributes: `board` (optional, see "Component architecture" above).
+Attributes:
+
+- `board` (optional, see "Component architecture" above)
+- `details` — set to `"false"` to hide everything below the two player
+  panels (meta line, result, comment), showing just the players
 
 ## `<go-board-controls>`
 
 Drives its `<go-board>`'s navigation API (`nextMove`/`previousMove`/
 `goToMove`) and play-all auto-advance (a 120ms interval until the main
 line ends). It ships a default icon-button UI (first/back-10/previous/
-play-all/next/forward-10/last, plus a move counter), but it's a
-**wrapper**, not a fixed widget: place your own markup inside it and
-that replaces the default UI entirely — this uses native `<slot>`
-fallback-content semantics (the default buttons are the `<slot>`'s
-fallback content, which stops rendering the moment the slot has any
-assigned children), so there's no configuration flag to toggle, just
-put elements inside it.
+play-all/next/forward-10/last), laid out as a 3-column row — the
+buttons stay centered as a group regardless of the container's width,
+and a move counter (just `"{index} / {count}"`, no "Move" prefix) is
+pinned to the right edge — but it's a **wrapper**, not a fixed widget:
+place your own markup inside it and that replaces the default UI
+entirely — this uses native `<slot>` fallback-content semantics (the
+default buttons are the `<slot>`'s fallback content, which stops
+rendering the moment the slot has any assigned children), so there's
+no configuration flag to toggle, just put elements inside it.
 
 Tag your elements so `<go-board-controls>` knows what they're for:
 
@@ -269,50 +278,55 @@ customize it (e.g. restyle, add a Restart button, or drop an action):
 ```html
 <go-board-controls>
   <div class="nav-controls">
-    <button data-go-action="first" title="First move" aria-label="First move">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="6" y1="5" x2="6" y2="19" />
-        <polyline points="18 6 10 12 18 18" />
-      </svg>
-    </button>
-    <button data-go-action="back-10" title="Back 10 moves" aria-label="Back 10 moves">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="18 6 12 12 18 18" />
-        <polyline points="11 6 5 12 11 18" />
-      </svg>
-    </button>
-    <button data-go-action="previous" title="Previous move" aria-label="Previous move">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="15 6 9 12 15 18" />
-      </svg>
-    </button>
-    <button data-go-action="play-all" title="Play all" aria-label="Play all">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
-        <polygon points="6 4 20 12 6 20" />
-      </svg>
-    </button>
-    <button data-go-action="next" title="Next move" aria-label="Next move">
-      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="9 6 15 12 9 18" />
-      </svg>
-    </button>
-    <button data-go-action="forward-10" title="Forward 10 moves" aria-label="Forward 10 moves">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <polyline points="6 6 12 12 6 18" />
-        <polyline points="13 6 19 12 13 18" />
-      </svg>
-    </button>
-    <button data-go-action="last" title="Last move" aria-label="Last move">
-      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <line x1="18" y1="5" x2="18" y2="19" />
-        <polyline points="6 6 14 12 6 18" />
-      </svg>
-    </button>
-    <span class="nav-counter" data-go-counter></span>
+    <div class="nav-buttons">
+      <button data-go-action="first" title="First move" aria-label="First move">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="6" y1="5" x2="6" y2="19" />
+          <polyline points="18 6 10 12 18 18" />
+        </svg>
+      </button>
+      <button data-go-action="back-10" title="Back 10 moves" aria-label="Back 10 moves">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="18 6 12 12 18 18" />
+          <polyline points="11 6 5 12 11 18" />
+        </svg>
+      </button>
+      <button data-go-action="previous" title="Previous move" aria-label="Previous move">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="15 6 9 12 15 18" />
+        </svg>
+      </button>
+      <button data-go-action="play-all" title="Play all" aria-label="Play all">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" stroke="none">
+          <polygon points="6 4 20 12 6 20" />
+        </svg>
+      </button>
+      <button data-go-action="next" title="Next move" aria-label="Next move">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="9 6 15 12 9 18" />
+        </svg>
+      </button>
+      <button data-go-action="forward-10" title="Forward 10 moves" aria-label="Forward 10 moves">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 6 12 12 6 18" />
+          <polyline points="13 6 19 12 13 18" />
+        </svg>
+      </button>
+      <button data-go-action="last" title="Last move" aria-label="Last move">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="5" x2="18" y2="19" />
+          <polyline points="6 6 14 12 6 18" />
+        </svg>
+      </button>
+    </div>
+    <span class="nav-counter" data-go-counter="{index} / {count}"></span>
   </div>
 </go-board-controls>
 <style>
-  .nav-controls { display: flex; align-items: center; gap: 0.375rem; }
+  /* 3-column grid: an empty spacer column balances the counter's width on
+     the other side, so the button group truly centers in the full row. */
+  .nav-controls { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 0.375rem; }
+  .nav-buttons { grid-column: 2; display: flex; align-items: center; gap: 0.375rem; }
   .nav-controls button {
     display: inline-flex; align-items: center; justify-content: center;
     width: 2.25rem; height: 2.25rem; padding: 0; border: none;
@@ -321,7 +335,7 @@ customize it (e.g. restyle, add a Restart button, or drop an action):
   .nav-controls button:hover:not([data-go-disabled]) { background: #4a4a4a; }
   .nav-controls button[data-go-disabled] { opacity: 0.3; cursor: default; }
   .nav-controls button[data-go-action="play-all"][data-go-playing] { background: #7a3a3a; }
-  .nav-counter { margin-left: 0.375rem; font-variant-numeric: tabular-nums; color: #bbb; font-size: 0.85rem; }
+  .nav-counter { grid-column: 3; justify-self: end; font-variant-numeric: tabular-nums; color: #bbb; font-size: 0.85rem; }
 </style>
 ```
 
@@ -408,10 +422,13 @@ board padding, configurable coordinates (sides/font/font-size/gap),
 partial/cropped board rendering (`x-start`/`x-end`/`y-start`/`y-end`,
 with a bleed effect on cut edges), the container/metadata/controls
 component split, configurable-binding keyboard navigation, a fully
-overridable `<go-board-controls>` with a default icon-button UI (tag
-your own markup with `data-go-action`/`data-go-counter`; first/back-10/
-previous/next/forward-10/last/play-all/restart actions available), and
-a `<go-metadata-container>` that shows live per-move comments.
+overridable `<go-board-controls>` with a default icon-button UI,
+centered as a group with a right-pinned move counter (tag your own
+markup with `data-go-action`/`data-go-counter`; first/back-10/previous/
+next/forward-10/last/play-all/restart actions available), and a
+`<go-metadata-container>` with black/white player panels, a
+toggleable (`details="false"`) info section, a spoiler-hidden result,
+and live per-move comments.
 
 Not yet implemented: scoring (territory counting), positional superko,
 handicap stones, SGF variation navigation/export, undo for

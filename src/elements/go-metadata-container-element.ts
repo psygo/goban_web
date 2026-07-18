@@ -7,6 +7,14 @@ const STYLES = `
     display: block;
     font-family: system-ui, sans-serif;
   }
+  /* The plain [hidden] UA-stylesheet rule loses to any author rule that
+     sets "display" on the same element (e.g. ".card { display: flex }"),
+     regardless of specificity, since author styles always beat user-agent
+     ones — so anything toggled via the "hidden" property/attribute needs
+     this restated with author-level priority to actually take effect. */
+  [hidden] {
+    display: none !important;
+  }
   .empty {
     margin: 0;
     color: #888;
@@ -63,8 +71,8 @@ const STYLES = `
   .player-text {
     min-width: 0;
     display: flex;
-    flex-direction: column;
-    line-height: 1.25;
+    align-items: baseline;
+    gap: 0.35rem;
   }
   .player-name {
     color: #eee;
@@ -77,28 +85,18 @@ const STYLES = `
   .player-rank {
     color: #999;
     font-size: 0.75rem;
-  }
-  .vs {
-    align-self: center;
     flex: none;
-    color: #666;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
   }
   .details {
     display: flex;
     flex-direction: column;
-    gap: 0.4rem;
+    gap: 0.3rem;
     padding-top: 0.6rem;
     border-top: 1px solid rgba(255, 255, 255, 0.08);
   }
   .meta-line {
     color: #999;
     font-size: 0.85rem;
-  }
-  .meta-line:empty {
-    display: none;
   }
   .result-line {
     display: flex;
@@ -134,13 +132,15 @@ const STYLES = `
 /**
  * `<go-metadata-container>` — displays the loaded SGF's game info as a
  * card, decomposed into three parts: a black-player panel and a
- * white-player panel (stone-color indicator, name, rank) side by side, and
- * below them the rest of the data — komi/date/event, the game result
- * (hidden behind a "Show result" toggle by default, since a spoiler-visible
- * result isn't always wanted alongside an SGF being replayed move by move),
- * and the *current* move's comment (SGF `C` property), which updates live
- * as the board navigates. Shows "No game loaded." until its `<go-board>`
- * fires `sgf-loaded`. Read-only — never calls back into the board.
+ * white-player panel (stone-color indicator, name and rank on one line)
+ * side by side — no "vs" divider between them, the two stone colors are
+ * distinction enough — and below them the rest of the data: komi/date/event
+ * each on their own line, the game result (hidden behind a "Show result"
+ * toggle by default, since a spoiler-visible result isn't always wanted
+ * alongside an SGF being replayed move by move), and the *current* move's
+ * comment (SGF `C` property), which updates live as the board navigates.
+ * Shows "No game loaded." until its `<go-board>` fires `sgf-loaded`.
+ * Read-only — never calls back into the board.
  *
  * The result reveal state resets (hides again) whenever a new game loads,
  * but is left alone across move navigation.
@@ -151,8 +151,14 @@ const STYLES = `
  * Attributes:
  *   - `board` (optional element id of the `<go-board>` to read from;
  *     otherwise the nearest one is located automatically)
+ *   - `details` — set to `"false"` to hide everything below the player
+ *     panels (meta line, result, comment), showing just the two players
  */
 export class GoMetadataContainerElement extends HTMLElement {
+  static get observedAttributes(): string[] {
+    return ["details"];
+  }
+
   private board: GoBoardElement | null = null;
   private resultRevealed = false;
 
@@ -162,11 +168,21 @@ export class GoMetadataContainerElement extends HTMLElement {
   private blackRankEl!: HTMLElement;
   private whiteNameEl!: HTMLElement;
   private whiteRankEl!: HTMLElement;
+  private detailsEl!: HTMLElement;
   private metaEl!: HTMLElement;
   private resultLineEl!: HTMLElement;
   private resultToggleEl!: HTMLButtonElement;
   private resultValueEl!: HTMLElement;
   private commentEl!: HTMLElement;
+
+  /** Whether the info below the player panels (meta line/result/comment) is shown, per the `details` attribute. */
+  private get showDetails(): boolean {
+    return !this.hasAttribute("details") || this.getAttribute("details") !== "false";
+  }
+
+  attributeChangedCallback(): void {
+    if (this.isConnected) this.render();
+  }
 
   connectedCallback(): void {
     if (!this.shadowRoot) {
@@ -183,7 +199,6 @@ export class GoMetadataContainerElement extends HTMLElement {
                 <span class="player-rank" id="blackRank"></span>
               </div>
             </div>
-            <span class="vs">vs</span>
             <div class="player-panel player-panel-white">
               <span class="stone-dot stone-dot-white"></span>
               <div class="player-text">
@@ -192,8 +207,8 @@ export class GoMetadataContainerElement extends HTMLElement {
               </div>
             </div>
           </div>
-          <div class="details">
-            <div class="meta-line" id="meta"></div>
+          <div class="details" id="details">
+            <div id="meta"></div>
             <div class="result-line" id="resultLine" hidden>
               <button class="result-toggle" id="resultToggle" type="button">Show result</button>
               <span class="result-value" id="resultValue" hidden></span>
@@ -208,6 +223,7 @@ export class GoMetadataContainerElement extends HTMLElement {
       this.blackRankEl = shadow.getElementById("blackRank") as HTMLElement;
       this.whiteNameEl = shadow.getElementById("whiteName") as HTMLElement;
       this.whiteRankEl = shadow.getElementById("whiteRank") as HTMLElement;
+      this.detailsEl = shadow.getElementById("details") as HTMLElement;
       this.metaEl = shadow.getElementById("meta") as HTMLElement;
       this.resultLineEl = shadow.getElementById("resultLine") as HTMLElement;
       this.resultToggleEl = shadow.getElementById("resultToggle") as HTMLButtonElement;
@@ -257,7 +273,17 @@ export class GoMetadataContainerElement extends HTMLElement {
     const whiteRank = property(root, "WR");
     this.whiteRankEl.textContent = whiteRank ? `(${whiteRank})` : "";
 
-    this.metaEl.textContent = formatMetaLine(root);
+    this.detailsEl.hidden = !this.showDetails;
+    if (!this.showDetails) return;
+
+    this.metaEl.replaceChildren(
+      ...metaLines(root).map((text) => {
+        const line = document.createElement("div");
+        line.className = "meta-line";
+        line.textContent = text;
+        return line;
+      }),
+    );
 
     const result = property(root, "RE");
     this.resultLineEl.hidden = !result;
@@ -276,12 +302,12 @@ function property(node: SGFNode, id: string): string | undefined {
   return node.properties[id]?.[0];
 }
 
-function formatMetaLine(root: SGFNode): string {
+function metaLines(root: SGFNode): string[] {
   const komi = property(root, "KM");
   const date = property(root, "DT");
   const event = property(root, "GN");
 
-  return [komi ? `Komi ${komi}` : "", date ?? "", event ?? ""].filter(Boolean).join(" · ");
+  return [komi ? `Komi ${komi}` : null, date, event].filter((line): line is string => Boolean(line));
 }
 
 customElements.define("go-metadata-container", GoMetadataContainerElement);

@@ -12,20 +12,34 @@ function cssLength(value: string): string {
 }
 
 /**
- * Resolves any valid CSS length (px, pt, rem, %, ...) to an absolute pixel
- * number, via a detached probe element the browser's own CSS engine
- * resolves — avoids reimplementing unit-conversion math ourselves.
+ * Resolves any valid CSS length (px, pt, rem, %, ..., including a negative
+ * one like `"-6px"`) to an absolute pixel number, via a detached probe
+ * element the browser's own CSS engine resolves — avoids reimplementing
+ * unit-conversion math ourselves.
  */
 function cssLengthToPixels(value: string): number {
+  const trimmed = value.trim();
+  // `font-size` (the probe property below) is CSS-defined as non-negative:
+  // setting it to a negative value is simply rejected, silently leaving the
+  // probe's font-size at its unrelated default instead of erroring — which
+  // would make any *negative* length (e.g. `label-offset-y="-6px"`, to
+  // shift a label up) resolve to some unrelated default pixel value rather
+  // than the intended negative one. Sign is pulled out and reapplied
+  // afterward so the magnitude can still go through the same
+  // browser-resolved probe.
+  const negative = trimmed.startsWith("-");
+  const magnitude = negative ? trimmed.slice(1) : trimmed;
+
   const probe = document.createElement("div");
   probe.style.position = "absolute";
   probe.style.visibility = "hidden";
   probe.style.pointerEvents = "none";
-  probe.style.fontSize = cssLength(value);
+  probe.style.fontSize = cssLength(magnitude);
   document.body.appendChild(probe);
   const resolved = parseFloat(getComputedStyle(probe).fontSize);
   probe.remove();
-  return Number.isFinite(resolved) ? resolved : 0;
+  const pixels = Number.isFinite(resolved) ? resolved : 0;
+  return negative ? -pixels : pixels;
 }
 
 // Skips "I" per Go coordinate convention.
@@ -37,6 +51,8 @@ const ALL_COORDINATE_SIDES: CoordinateSide[] = ["top", "bottom", "left", "right"
 const DEFAULT_COORDS_FONT_FAMILY = "system-ui, sans-serif";
 const DEFAULT_COORDS_FONT_SIZE = "0.32";
 const DEFAULT_COORDS_GAP = 0.5;
+const DEFAULT_LABEL_FONT_FAMILY = "system-ui, sans-serif";
+const DEFAULT_LABEL_FONT_SIZE = "0.55";
 
 // Small, so the default look matches the pre-reservation-split appearance:
 // coordinate labels already carve out their own space (see `computeLayout`),
@@ -44,6 +60,11 @@ const DEFAULT_COORDS_GAP = 0.5;
 const DEFAULT_PADDING = 0.2;
 const STONE_RADIUS = 0.475;
 const STAR_RADIUS = 0.09;
+// Auto corner radius (no explicit `corner-radius`) is this fraction of the
+// margin between the board's outer edge and the grid, capped so a large
+// padding doesn't balloon it into a pill shape.
+const AUTO_CORNER_RADIUS_RATIO = 0.8;
+const MAX_AUTO_CORNER_RADIUS = 0.6;
 // How far a cropped edge's grid lines overhang past the last visible
 // intersection, signaling "the board continues past what's shown" instead of
 // looking like a smaller full board.
@@ -58,6 +79,11 @@ const MARKUP_SHAPES: Record<string, MarkupShape> = {
   MA: "cross",
 };
 const MARK_RADIUS = STONE_RADIUS * 0.55;
+// Radius of the hole punched into the grid layer behind a piece of markup
+// that sits on an empty point, so the grid line doesn't cut through it. It
+// only ever hides the *grid*, never the board texture underneath — see
+// `clearGridAt`.
+const GRID_CLEAR_RADIUS = STONE_RADIUS * 0.8;
 
 interface BoardLayout {
   size: number;
@@ -181,6 +207,24 @@ function normalizeKeyBinding(value: string | string[] | undefined): string[] | u
  *     the default wood gradient)
  *   - `keyboard-shortcuts` (boolean, default present) — set to `"false"` to
  *     disable arrow-key SGF navigation entirely
+ *   - `stone-size` — stone radius relative to the board's own scale, as a
+ *     bare multiplier (`"0.9"`) or percentage (`"90%"`) of the default
+ *     size (default `1`)
+ *   - `corner-radius` — real CSS length for the board's rounded corners
+ *     (and, if set, `background-image`'s). `"0"` gives sharp corners.
+ *     Unset auto-computes a radius proportional to `padding`, capped so it
+ *     never eats into the grid or coordinate labels.
+ *   - `label-font` / `label-font-size` — CSS font-family / real CSS length
+ *     for `LB` markup label text, independent of `coordinates-font`/
+ *     `coordinates-font-size` (defaults `"system-ui, sans-serif"` /
+ *     matching the board's scale, about `0.55` of a grid cell). Any
+ *     font-family the page itself has loaded works here, including one
+ *     it's registered via `@font-face { src: local(...) }` against a
+ *     locally-installed font — e.g. LaTeX's Latin Modern Roman, if
+ *     present on the system (see "Fonts" in Docs.md).
+ *   - `label-offset-x` / `label-offset-y` — real CSS length nudging `LB`
+ *     label text off the exact point center (default `0`, i.e. centered).
+ *     Purely cosmetic — doesn't move the underlying point being labeled.
  *
  * Keyboard navigation: with an `sgf` loaded, ArrowRight/ArrowLeft step
  * `nextMove()`/`previousMove()` whenever focus is anywhere inside the
@@ -216,6 +260,12 @@ export class GoBoardElement extends HTMLElement {
       "x-end",
       "y-start",
       "y-end",
+      "stone-size",
+      "label-offset-x",
+      "label-offset-y",
+      "label-font",
+      "label-font-size",
+      "corner-radius",
     ];
   }
 
@@ -223,6 +273,7 @@ export class GoBoardElement extends HTMLElement {
   private svg!: SVGSVGElement;
   private stonesGroup!: SVGGElement;
   private markupGroup!: SVGGElement;
+  private gridMaskHoles!: SVGGElement;
   private ghostStone!: SVGCircleElement;
   private hovered: Vertex | null = null;
 
@@ -245,6 +296,7 @@ export class GoBoardElement extends HTMLElement {
   connectedCallback(): void {
     this.applyHostSize();
     this.applyCoordinateStyle();
+    this.applyLabelStyle();
     this.buildSvg();
     this.render();
     // Bound to the host, not `this.svg` — `buildSvg()` replaces the entire
@@ -298,6 +350,9 @@ export class GoBoardElement extends HTMLElement {
     } else if (name === "coordinates-font" || name === "coordinates-font-size") {
       this.applyCoordinateStyle();
       return;
+    } else if (name === "label-font" || name === "label-font-size") {
+      this.applyLabelStyle();
+      return;
     } else if (
       name === "background-image" ||
       name === "coordinates" ||
@@ -306,7 +361,8 @@ export class GoBoardElement extends HTMLElement {
       name === "x-start" ||
       name === "x-end" ||
       name === "y-start" ||
-      name === "y-end"
+      name === "y-end" ||
+      name === "corner-radius"
     ) {
       this.applyHostSize();
       this.buildSvg();
@@ -411,6 +467,46 @@ export class GoBoardElement extends HTMLElement {
     return Math.max(0, this.cssLengthToBoardUnits(attr, DEFAULT_PADDING) ?? DEFAULT_PADDING);
   }
 
+  /**
+   * Stone radius scale relative to the default size (see `stone-size`) — a
+   * bare multiplier (`"0.9"`) or percentage (`"90%"`) of the built-in
+   * radius, not a CSS length, since it's a proportion of the board's own
+   * scale rather than an absolute size.
+   */
+  private get stoneSizeScale(): number {
+    const attr = this.getAttribute("stone-size");
+    if (!attr) return 1;
+    const trimmed = attr.trim();
+    const value = trimmed.endsWith("%") ? Number(trimmed.slice(0, -1)) / 100 : Number(trimmed);
+    return Number.isFinite(value) && value > 0 ? value : 1;
+  }
+
+  /** Horizontal nudge applied to `LB` label text, in board units (see `label-offset-x`). */
+  private get labelOffsetX(): number {
+    const attr = this.getAttribute("label-offset-x");
+    if (!attr) return 0;
+    return this.cssLengthToBoardUnits(attr) ?? 0;
+  }
+
+  /** Vertical nudge applied to `LB` label text, in board units (see `label-offset-y`). */
+  private get labelOffsetY(): number {
+    const attr = this.getAttribute("label-offset-y");
+    if (!attr) return 0;
+    return this.cssLengthToBoardUnits(attr) ?? 0;
+  }
+
+  /**
+   * Explicit `corner-radius` override, in board units, or `null` to fall
+   * back to the automatic proportional radius (see `buildSvg`). `"0"`
+   * disables rounding entirely — a real, intentional value, distinct from
+   * "unset".
+   */
+  private get cornerRadiusOverride(): number | null {
+    const attr = this.getAttribute("corner-radius");
+    if (attr === null || attr === "") return null;
+    return Math.max(0, this.cssLengthToBoardUnits(attr) ?? 0);
+  }
+
   /** Inclusive vertex range shown along an axis, per `x-start`/`x-end`/`y-start`/`y-end`. */
   private cropRange(startAttr: string, endAttr: string): [number, number] {
     const size = this._board.size;
@@ -473,6 +569,27 @@ export class GoBoardElement extends HTMLElement {
       : Number(DEFAULT_COORDS_FONT_SIZE);
     if (units === null) return; // not laid out yet; the ResizeObserver's first callback retries
     this.style.setProperty("--go-coords-font-size", `${units}px`);
+  }
+
+  /**
+   * Reflects `label-font`/`label-font-size` onto CSS custom properties,
+   * consumed by `.mark-label` — the same custom-property substitution
+   * approach as `applyCoordinateStyle`, and for the same reason (an
+   * attacker-controlled font-family string can't break out into new CSS
+   * rules this way). Kept independent of `--go-coords-*` so coordinate
+   * labels and SGF markup labels (`LB`) can be styled separately — they're
+   * unrelated pieces of text that happen to both be text.
+   */
+  private applyLabelStyle(): void {
+    const fontFamily = this.getAttribute("label-font") || DEFAULT_LABEL_FONT_FAMILY;
+    this.style.setProperty("--go-label-font-family", fontFamily);
+
+    const fontSizeAttr = this.getAttribute("label-font-size");
+    const units = fontSizeAttr
+      ? this.cssLengthToBoardUnits(fontSizeAttr)
+      : Number(DEFAULT_LABEL_FONT_SIZE);
+    if (units === null) return; // not laid out yet; the ResizeObserver's first callback retries
+    this.style.setProperty("--go-label-font-size", `${units}px`);
   }
 
   /**
@@ -728,11 +845,16 @@ export class GoBoardElement extends HTMLElement {
 
   private readonly handleResize = (): void => {
     this.applyCoordinateStyle();
+    this.applyLabelStyle();
     this.applyHostSize();
     if (
       this.hasAttribute("coordinates-gap") ||
       this.hasAttribute("padding") ||
-      this.hasAttribute("coordinates-font-size")
+      this.hasAttribute("coordinates-font-size") ||
+      this.hasAttribute("label-offset-x") ||
+      this.hasAttribute("label-offset-y") ||
+      this.hasAttribute("label-font-size") ||
+      this.hasAttribute("corner-radius")
     ) {
       this.buildSvg();
       this.render();
@@ -795,6 +917,19 @@ export class GoBoardElement extends HTMLElement {
 
     const coordMarkup = this.buildCoordinateMarkup(layout);
 
+    // Margin between the board's outer edge and the grid itself — the
+    // automatic rounded corners (no explicit `corner-radius`) are capped
+    // against it so they never eat into the grid lines or coordinate
+    // labels. An explicit override is instead only capped against the
+    // board's own extent, so it's honored as given (including "0", to
+    // disable rounding) rather than silently clamped to the auto range.
+    const margin = gridOffsetX + xStart;
+    const override = this.cornerRadiusOverride;
+    const cornerRadius =
+      override === null
+        ? Math.min(margin * AUTO_CORNER_RADIUS_RATIO, MAX_AUTO_CORNER_RADIUS)
+        : Math.min(override, Math.min(extentX, extentY) / 2);
+
     this.shadowRoot!.innerHTML = `
       <style>${STYLES}</style>
       <svg viewBox="0 0 ${extentX} ${extentY}" role="group" aria-label="Go board">
@@ -813,20 +948,28 @@ export class GoBoardElement extends HTMLElement {
             <stop offset="75%" stop-color="#e7e2d6" />
             <stop offset="100%" stop-color="#c9c3b3" />
           </radialGradient>
+          <clipPath id="board-clip">
+            <rect x="0" y="0" width="${extentX}" height="${extentY}" rx="${cornerRadius}" ry="${cornerRadius}" />
+          </clipPath>
+          <mask id="grid-mask">
+            <rect x="0" y="0" width="${extentX}" height="${extentY}" fill="white" />
+            <g class="grid-mask-holes"></g>
+          </mask>
         </defs>
-        <rect class="board-bg" x="0" y="0" width="${extentX}" height="${extentY}" fill="url(#wood)" />
-        <g class="grid" stroke="#453017" stroke-width="0.035">${gridLines.join("")}</g>
+        <rect class="board-bg" x="0" y="0" width="${extentX}" height="${extentY}" rx="${cornerRadius}" ry="${cornerRadius}" fill="url(#wood)" />
+        <g class="grid" stroke="#453017" stroke-width="0.035" mask="url(#grid-mask)">${gridLines.join("")}</g>
         <g class="star-points" fill="#453017">${starMarkup}</g>
         ${coordMarkup}
         <g class="stones"></g>
         <g class="markup"></g>
-        <circle class="ghost-stone" r="${STONE_RADIUS}" visibility="hidden" />
+        <circle class="ghost-stone" r="${STONE_RADIUS * this.stoneSizeScale}" visibility="hidden" />
       </svg>
     `;
 
     this.svg = this.shadowRoot!.querySelector("svg") as SVGSVGElement;
     this.stonesGroup = this.shadowRoot!.querySelector(".stones") as SVGGElement;
     this.markupGroup = this.shadowRoot!.querySelector(".markup") as SVGGElement;
+    this.gridMaskHoles = this.shadowRoot!.querySelector(".grid-mask-holes") as SVGGElement;
     this.ghostStone = this.shadowRoot!.querySelector(".ghost-stone") as SVGCircleElement;
 
     // Built via DOM APIs (not string-interpolated into the markup above) so
@@ -838,6 +981,9 @@ export class GoBoardElement extends HTMLElement {
       image.setAttribute("y", "0");
       image.setAttribute("width", String(extentX));
       image.setAttribute("height", String(extentY));
+      // Same rounding as `.board-bg` — without this the image's square
+      // corners would poke out past the wood rect's rounded ones.
+      image.setAttribute("clip-path", "url(#board-clip)");
       // "none" (stretch to fill exactly), not "slice" (crop-to-cover):
       // Chromium has a rendering bug where scaling a referenced SVG image
       // via the slice/meet fitting math at a very non-square aspect ratio
@@ -909,6 +1055,7 @@ export class GoBoardElement extends HTMLElement {
   private renderMarkup(layout: BoardLayout): void {
     if (!this.markupGroup) return;
     this.markupGroup.replaceChildren();
+    this.gridMaskHoles?.replaceChildren();
     const node = this._sgfTree?.nodes[this._moveIndex];
     if (!node) return;
 
@@ -918,6 +1065,7 @@ export class GoBoardElement extends HTMLElement {
     for (const [propertyId, shape] of Object.entries(MARKUP_SHAPES)) {
       for (const vertex of sgfPointsForProperty(node, propertyId)) {
         if (!inCrop(vertex)) continue;
+        this.clearGridAt(vertex.x, vertex.y, gridOffsetX + vertex.x, gridOffsetY + vertex.y);
         this.markupGroup.appendChild(this.createMark(shape, vertex.x, vertex.y, gridOffsetX, gridOffsetY));
       }
     }
@@ -925,10 +1073,43 @@ export class GoBoardElement extends HTMLElement {
     for (const raw of node.properties["LB"] ?? []) {
       const label = parseSGFLabel(raw);
       if (!label || !inCrop(label.vertex)) continue;
+      // Cleared at the *offset* position — wherever `label-offset-x/y`
+      // actually puts the text — not the raw intersection, so the hole
+      // still lines up with the glyph once nudged off-center.
+      this.clearGridAt(
+        label.vertex.x,
+        label.vertex.y,
+        gridOffsetX + label.vertex.x + this.labelOffsetX,
+        gridOffsetY + label.vertex.y + this.labelOffsetY,
+      );
       this.markupGroup.appendChild(
         this.createLabel(label.text, label.vertex.x, label.vertex.y, gridOffsetX, gridOffsetY),
       );
     }
+  }
+
+  /**
+   * Punches a hole in the `.grid` layer's mask at an empty point that's
+   * about to get a mark or label drawn on it — otherwise the grid line
+   * crossing that intersection visually cuts through the markup. This
+   * hides only the grid line itself; the wood/background-image layer
+   * underneath (`.board-bg`, drawn below `.grid`) is untouched, so the
+   * point still reads as part of the board rather than sitting on a
+   * conspicuous patch. A no-op on a point that already has a stone, since
+   * the opaque stone already covers the grid line there.
+   *
+   * `gridX`/`gridY` are the underlying board vertex (for the empty-point
+   * check); `cx`/`cy` are where the hole is actually drawn, which for an
+   * off-center label differ from the vertex's own grid position.
+   */
+  private clearGridAt(gridX: number, gridY: number, cx: number, cy: number): void {
+    if (!this.gridMaskHoles || this._board.get(gridX, gridY) !== Color.Empty) return;
+    const hole = document.createElementNS(SVG_NS, "circle");
+    hole.setAttribute("cx", String(cx));
+    hole.setAttribute("cy", String(cy));
+    hole.setAttribute("r", String(GRID_CLEAR_RADIUS));
+    hole.setAttribute("fill", "black");
+    this.gridMaskHoles.appendChild(hole);
   }
 
   /** A light mark reads on a black stone, a dark one on a white stone or empty point/wood. */
@@ -996,8 +1177,8 @@ export class GoBoardElement extends HTMLElement {
 
   private createLabel(text: string, x: number, y: number, gridOffsetX: number, gridOffsetY: number): SVGTextElement {
     const el = document.createElementNS(SVG_NS, "text") as SVGTextElement;
-    el.setAttribute("x", String(gridOffsetX + x));
-    el.setAttribute("y", String(gridOffsetY + y));
+    el.setAttribute("x", String(gridOffsetX + x + this.labelOffsetX));
+    el.setAttribute("y", String(gridOffsetY + y + this.labelOffsetY));
     el.setAttribute("class", "mark-label");
     el.setAttribute("fill", this.markColorAt(x, y));
     // .textContent, not innerHTML: label text comes straight from the SGF
@@ -1014,12 +1195,13 @@ export class GoBoardElement extends HTMLElement {
 
   private createStone(x: number, y: number, color: Color, gridOffsetX: number, gridOffsetY: number): SVGElement {
     const imageUrl = this.stoneImageUrl(color);
+    const radius = STONE_RADIUS * this.stoneSizeScale;
     if (imageUrl) {
       const image = document.createElementNS(SVG_NS, "image");
-      image.setAttribute("x", String(gridOffsetX + x - STONE_RADIUS));
-      image.setAttribute("y", String(gridOffsetY + y - STONE_RADIUS));
-      image.setAttribute("width", String(STONE_RADIUS * 2));
-      image.setAttribute("height", String(STONE_RADIUS * 2));
+      image.setAttribute("x", String(gridOffsetX + x - radius));
+      image.setAttribute("y", String(gridOffsetY + y - radius));
+      image.setAttribute("width", String(radius * 2));
+      image.setAttribute("height", String(radius * 2));
       image.setAttribute("href", imageUrl);
       image.setAttribute("class", "stone");
       return image;
@@ -1027,7 +1209,7 @@ export class GoBoardElement extends HTMLElement {
     const circle = document.createElementNS(SVG_NS, "circle");
     circle.setAttribute("cx", String(gridOffsetX + x));
     circle.setAttribute("cy", String(gridOffsetY + y));
-    circle.setAttribute("r", String(STONE_RADIUS));
+    circle.setAttribute("r", String(radius));
     circle.setAttribute("class", color === Color.Black ? "stone stone-black" : "stone stone-white");
     return circle;
   }
@@ -1049,6 +1231,7 @@ export class GoBoardElement extends HTMLElement {
     const { gridOffsetX, gridOffsetY } = this.computeLayout();
     this.ghostStone.setAttribute("cx", String(gridOffsetX + vertex.x));
     this.ghostStone.setAttribute("cy", String(gridOffsetY + vertex.y));
+    this.ghostStone.setAttribute("r", String(STONE_RADIUS * this.stoneSizeScale));
     this.ghostStone.setAttribute(
       "fill",
       this._board.currentColor === Color.Black ? "#111111" : "#f5f2e9",
@@ -1105,11 +1288,14 @@ const STYLES = `
     stroke-width: 0.08;
   }
   .mark-label {
-    font-family: var(--go-coords-font-family, system-ui, sans-serif);
-    font-size: 0.55px;
+    font-family: var(--go-label-font-family, system-ui, sans-serif);
+    font-size: var(--go-label-font-size, 0.55px);
     font-weight: 600;
     text-anchor: middle;
-    dominant-baseline: middle;
+    /* Not "middle": most browsers hang glyphs from a baseline above the
+     * true visual center under "middle", which reads as text sitting too
+     * high. "central" lines up with the glyph's actual vertical middle. */
+    dominant-baseline: central;
   }
 `;
 

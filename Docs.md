@@ -118,6 +118,86 @@ and steps through an SGF game record.
   seam) at the very non-square aspect ratios a cropped board can have.
 - `keyboard-shortcuts` — set to `"false"` to disable arrow-key SGF
   navigation (see "Keyboard navigation" below).
+- `stone-size` — stone radius relative to the board's own scale, as a
+  bare multiplier (`"0.9"`) or a percentage (`"90%"`) of the built-in
+  default (default `1`). Affects both the default gradient stones and
+  `black-stone`/`white-stone` images, plus the hover ghost stone.
+  Doesn't affect markup mark size (`TR`/`SQ`/`CR`/`MA`), which stays at
+  its own fixed proportion of the grid cell regardless.
+- `corner-radius` — a real CSS length for the board's rounded corners
+  (and a `background-image`'s, clipped to match), converted the same
+  way as `padding`/`coordinates-gap`. `"0"` gives sharp square corners.
+  Left unset, the radius auto-computes as a proportion of `padding`,
+  capped so it never eats into the grid or coordinate labels — this was
+  the fixed, non-configurable behavior before this attribute existed.
+- `label-font` / `label-font-size` — CSS font-family / a real CSS
+  length for `LB` markup label text specifically, independent of
+  `coordinates-font`/`coordinates-font-size` (defaults
+  `"system-ui, sans-serif"` / about `0.55` of a grid cell), converted
+  the same way as the coordinate attributes. Any font-family the page
+  has access to works, including a webfont it's registered via
+  `@font-face`, or a locally-installed font referenced via
+  `src: local(...)` — see "Fonts" below for using LaTeX's Latin Modern
+  Roman this way.
+- `label-offset-x` / `label-offset-y` — a real CSS length nudging `LB`
+  label text off the exact center of its point (default `0`, i.e.
+  centered), converted the same way. The grid-clearing hole (see
+  below) follows the label to wherever it actually ends up, so an
+  offset label still doesn't get a line cut through it. Purely
+  cosmetic — never moves the point actually being labeled, just where
+  its text is drawn.
+
+### Fonts
+
+`coordinates-font` and `label-font` accept any CSS font-family the
+page itself has loaded — goban-web doesn't bundle any fonts of its
+own, dependency-free as it is. To use a font the browser doesn't ship
+(like LaTeX's Latin Modern Roman), register it with `@font-face` on
+the page and reference the same family name in the attribute. Two
+ways to do that:
+
+**Self-hosted** (what `index.html`'s demo does, for `label-font`) —
+ship the actual webfont files so it renders identically for every
+visitor, regardless of what they have installed locally:
+
+```html
+<style>
+  @font-face {
+    font-family: "Latin Modern Roman";
+    src: url("/assets/fonts/lmroman-regular-webfont.woff") format("woff");
+    font-weight: normal;
+  }
+  @font-face {
+    font-family: "Latin Modern Roman";
+    src: url("/assets/fonts/lmroman-bold-webfont.woff") format("woff");
+    font-weight: bold;
+  }
+</style>
+<go-board label-font="'Latin Modern Roman', serif" ...></go-board>
+```
+
+The demo's font files (`public/assets/fonts/`) are a repackaging of
+the Latin Modern Roman webfont kit under the GUST Font License — free
+to use, modify, and redistribute; see `public/assets/fonts/LICENSE.md`
+for the full text and provenance.
+
+**Local-only**, if you'd rather not ship font files at all — this only
+renders with Latin Modern Roman for visitors who happen to already
+have a LaTeX distribution installed (TeX Live, MacTeX, MiKTeX, ...),
+falling back to the next font in the list for everyone else:
+
+```html
+<style>
+  @font-face {
+    font-family: "Latin Modern Roman";
+    src:
+      local("Latin Modern Roman"),
+      local("LMRoman10-Regular"),
+      local("CMU Serif");
+  }
+</style>
+<go-board label-font="'Latin Modern Roman', serif" ...></go-board>
+```
 
 ### SGF setup stones and markup
 
@@ -143,8 +223,13 @@ Beyond `B`/`W` moves, a loaded `sgf` also understands:
   persisting as the game continues; they disappear on the next move
   unless that node repeats them. Mark color automatically contrasts
   with whatever's underneath (light on a black stone, dark on a white
-  stone or empty point). Respects `x-start`/`x-end`/`y-start`/`y-end`
-  cropping like everything else.
+  stone or empty point). Any markup — shape or label — on an empty
+  point also punches a hole in the grid layer's mask at that
+  intersection, so the grid line stops right where the markup starts
+  instead of visibly cutting through it; the wood/background-image
+  layer underneath is untouched, so the point still just looks like
+  part of the board rather than sitting on a patch. Respects
+  `x-start`/`x-end`/`y-start`/`y-end` cropping like everything else.
 
 ### Properties & methods
 

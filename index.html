@@ -5,6 +5,26 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>goban-web demo</title>
     <style>
+      /*
+       * LaTeX's Latin Modern Roman, self-hosted (not a system/local()
+       * lookup) so it renders the same for every visitor regardless of
+       * whether they have a TeX distribution installed. Files are a
+       * repackaging of the GUST Font License-covered Latin Modern Roman
+       * webfont kit (see public/assets/fonts/LICENSE.md for provenance
+       * and license text) — free to use, modify, and redistribute.
+       */
+      @font-face {
+        font-family: "Latin Modern Roman";
+        src: url("/assets/fonts/lmroman-regular-webfont.woff") format("woff");
+        font-weight: normal;
+        font-style: normal;
+      }
+      @font-face {
+        font-family: "Latin Modern Roman";
+        src: url("/assets/fonts/lmroman-bold-webfont.woff") format("woff");
+        font-weight: bold;
+        font-style: normal;
+      }
       body {
         margin: 0;
         min-height: 100vh;
@@ -111,10 +131,6 @@
         align-items: center;
         gap: 1rem;
       }
-      go-board {
-        border-radius: 4px;
-        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-      }
       .title-row {
         width: 100%;
         display: flex;
@@ -199,7 +215,7 @@
       <go-board-container>
         <go-metadata-container details="false"></go-metadata-container>
         <go-board
-          sgf="/assets/ing_cup_rules_4.sgf"
+          sgf="/assets/ing_cup_rules_2.sgf"
           black-stone="/assets/black-stone.svg"
           white-stone="/assets/white-stone.svg"
           background-image="/assets/board-background.svg"
@@ -209,6 +225,10 @@
           coordinates-gap="15px"
           coordinates-font-size="10pt"
           padding="16px"
+          corner-radius="8px"
+          label-offset-y="-1.25"
+          label-font="'Latin Modern Roman', serif"
+          stone-size="1.1"
         ></go-board>
         <go-board-controls counter="false"></go-board-controls>
       </go-board-container>

@@ -45,76 +45,16 @@
         }
       }
       /*
-       * Manual theme override: the components auto-follow
-       * `prefers-color-scheme`, but that reflects the OS/browser setting
-       * and can't be flipped from page JS. To let the button below force a
-       * theme regardless of that, both the page and the two peripheral
-       * components read their colors through a shared `--goban-*` custom
-       * property layer (see "Theming" in Docs.md) — setting those here,
-       * scoped to `:root[data-theme="..."]`, overrides the components'
-       * own `prefers-color-scheme`-driven defaults, since custom
-       * properties inherit through shadow DOM boundaries. No `data-theme`
-       * attribute (the default) means "follow the OS", same as before.
+       * Manual theme override for the *page's own* chrome (body
+       * background/text) — separate from goban-web's components, which
+       * take their own `color-scheme` directly as a `<goban-wrapper>`
+       * attribute now (see "Theming" in Docs.md), not through this global
+       * CSS. No `data-theme` attribute (the default) means "follow the
+       * OS", same as before.
        */
-      :root[data-theme="dark"] {
-        --goban-text: #eee;
-        --goban-text-secondary: #999;
-        --goban-text-muted: #888;
-        --goban-comment: #ccc;
-        --goban-panel-bg: linear-gradient(
-          180deg,
-          rgba(255, 255, 255, 0.1),
-          rgba(255, 255, 255, 0.04)
-        );
-        --goban-panel-border: rgba(255, 255, 255, 0.14);
-        --goban-panel-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
-        --goban-card-bg: linear-gradient(
-          180deg,
-          rgba(255, 255, 255, 0.05),
-          rgba(255, 255, 255, 0.02)
-        );
-        --goban-card-border: rgba(255, 255, 255, 0.09);
-        --goban-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-        --goban-toggle-bg: rgba(255, 255, 255, 0.08);
-        --goban-toggle-bg-hover: rgba(255, 255, 255, 0.14);
-        --goban-toggle-border: rgba(255, 255, 255, 0.12);
-        --goban-btn-bg: #3a3a3a;
-        --goban-btn-bg-hover: #4a4a4a;
-        --goban-btn-color: #eee;
-        --goban-btn-playing-bg: #7a3a3a;
-        --goban-counter: #bbb;
-      }
       :root[data-theme="dark"] body {
         background: #2b2b2b;
         color: #eee;
-      }
-      :root[data-theme="light"] {
-        --goban-text: #1a1a1a;
-        --goban-text-secondary: #666;
-        --goban-text-muted: #767676;
-        --goban-comment: #444;
-        --goban-panel-bg: linear-gradient(
-          180deg,
-          rgba(0, 0, 0, 0.05),
-          rgba(0, 0, 0, 0.015)
-        );
-        --goban-panel-border: rgba(0, 0, 0, 0.18);
-        --goban-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-        --goban-card-bg: linear-gradient(
-          180deg,
-          rgba(0, 0, 0, 0.035),
-          rgba(0, 0, 0, 0.015)
-        );
-        --goban-card-border: rgba(0, 0, 0, 0.1);
-        --goban-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-        --goban-toggle-bg: rgba(0, 0, 0, 0.06);
-        --goban-toggle-bg-hover: rgba(0, 0, 0, 0.1);
-        --goban-toggle-border: rgba(0, 0, 0, 0.14);
-        --goban-btn-bg: #e6e4e0;
-        --goban-btn-bg-hover: #d8d5cf;
-        --goban-btn-color: #2a2a2a;
-        --goban-btn-playing-bg: #f0c2c2;
-        --goban-counter: #666;
       }
       :root[data-theme="light"] body {
         background: #fafafa;
@@ -122,14 +62,33 @@
       }
       main {
         /* No explicit width: shrinks to fit its widest child, which is
-         * go-board-container — itself sized by <go-board>'s own
-         * width/height attributes. This keeps .title-row (100% of main)
-         * exactly as wide as the board, instead of an arbitrary cap. */
+         * go-board-container — itself sized by <go-board>'s own `width`
+         * attribute (see the size slider below). This keeps .title-row
+         * (100% of main) exactly as wide as the board, instead of an
+         * arbitrary cap. */
         max-width: 90vw;
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 1rem;
+      }
+      /*
+       * <go-board>'s own `width` attribute (driven by the slider below)
+       * is a fixed length, not a percentage — on its own that would
+       * overflow a narrow viewport once the slider's set past however
+       * much room is actually available. `max-width: 100%` on both it
+       * and go-board-container (which otherwise has no width of its own,
+       * just shrink-wrapping go-board's) is what actually makes "the
+       * container and everything inside it" responsive: it caps both at
+       * whatever `main`'s own 90vw allows, so the slider gives an upper
+       * bound, not a fixed size the layout has to honor unconditionally.
+       * go-metadata-container/go-board-controls need no such rule of
+       * their own — they already stretch to match go-board-container's
+       * width via its default flex `align-items: stretch`.
+       */
+      go-board-container,
+      go-board {
+        max-width: 100%;
       }
       .title-row {
         width: 100%;
@@ -139,6 +98,24 @@
       }
       .title-row h1 {
         margin: 0;
+      }
+      .size-row {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.9rem;
+      }
+      .size-row input[type="range"] {
+        flex: 1;
+        accent-color: currentColor;
+      }
+      .size-row output {
+        flex: none;
+        min-width: 3.5rem;
+        text-align: right;
+        font-variant-numeric: tabular-nums;
+        opacity: 0.8;
       }
       .theme-toggle {
         display: inline-flex;
@@ -212,33 +189,51 @@
           </svg>
         </button>
       </div>
-      <go-board-container>
-        <go-metadata-container details="false"></go-metadata-container>
-        <go-board
-          theme="wgojs"
-          sgf="/assets/ing_cup_rules_2.sgf"
-          width="480"
-          height="480"
-          coordinates="none"
-          coordinates-gap="15px"
-          coordinates-font-size="10pt"
-          padding="16px"
-          corner-radius="8px"
-          label-offset-y="-1.25"
-          label-font="'Latin Modern Roman', serif"
-          stone-size="1.0"
-        ></go-board>
-        <go-board-controls counter="false"></go-board-controls>
-      </go-board-container>
+      <div class="size-row">
+        <label for="width-slider">Board width</label>
+        <input type="range" id="width-slider" min="240" max="800" step="10" value="480" />
+        <output id="width-output" for="width-slider">480px</output>
+      </div>
+      <goban-wrapper id="goban-theme">
+        <go-board-container>
+          <go-metadata-container details="false"></go-metadata-container>
+          <go-board
+            id="board"
+            theme="wgojs"
+            sgf="/assets/ing_cup_rules_2.sgf"
+            width="480"
+            coordinates="none"
+            coordinates-gap="15px"
+            coordinates-font-size="10pt"
+            padding="16px"
+            corner-radius="8px"
+            label-offset-y="-1.25"
+            label-font="'Latin Modern Roman', serif"
+            stone-size="1.0"
+          ></go-board>
+          <go-board-controls counter="false"></go-board-controls>
+        </go-board-container>
+      </goban-wrapper>
     </main>
     <script type="module" src="/src/main.ts"></script>
     <script type="module">
       const THEME_KEY = "goban-demo-theme"
       const root = document.documentElement
       const button = document.getElementById("theme-toggle")
+      const gobanWrapper = document.getElementById("goban-theme")
+
+      function applyTheme(theme) {
+        if (theme === "light" || theme === "dark") {
+          root.dataset.theme = theme
+          gobanWrapper.setAttribute("color-scheme", theme)
+        } else {
+          delete root.dataset.theme
+          gobanWrapper.removeAttribute("color-scheme")
+        }
+      }
 
       const stored = localStorage.getItem(THEME_KEY)
-      if (stored === "light" || stored === "dark") root.dataset.theme = stored
+      if (stored === "light" || stored === "dark") applyTheme(stored)
 
       function currentTheme() {
         if (root.dataset.theme === "light" || root.dataset.theme === "dark")
@@ -254,12 +249,42 @@
 
       button.addEventListener("click", () => {
         const next = currentTheme() === "light" ? "dark" : "light"
-        root.dataset.theme = next
+        applyTheme(next)
         localStorage.setItem(THEME_KEY, next)
         syncButton()
       })
 
       syncButton()
+
+      // Board width: <go-board width="..."> is a fixed length, not a
+      // percentage, so it doesn't resize with the viewport on its own —
+      // "max-width: 100%" (see the stylesheet above) is what caps it
+      // back down on a narrow screen, same as it caps the slider's own
+      // upper end. Height is never set directly: leaving it unset makes
+      // go-board derive it from `width` at the board's own aspect ratio
+      // (see "width"/"height" in Docs.md), so a non-square crop wouldn't
+      // get stretched by this slider.
+      const WIDTH_KEY = "goban-demo-width"
+      const board = document.getElementById("board")
+      const slider = document.getElementById("width-slider")
+      const output = document.getElementById("width-output")
+
+      function applyWidth(px) {
+        board.setAttribute("width", `${px}px`)
+        output.textContent = `${px}px`
+      }
+
+      const storedWidth = Number(localStorage.getItem(WIDTH_KEY))
+      if (Number.isInteger(storedWidth) && storedWidth >= Number(slider.min) && storedWidth <= Number(slider.max)) {
+        slider.value = String(storedWidth)
+      }
+      applyWidth(Number(slider.value))
+
+      slider.addEventListener("input", () => {
+        const px = Number(slider.value)
+        applyWidth(px)
+        localStorage.setItem(WIDTH_KEY, String(px))
+      })
     </script>
   </body>
 </html>

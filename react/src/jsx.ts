@@ -1,4 +1,4 @@
-// Declares the four custom element tags as valid JSX intrinsics so the
+// Declares the five custom element tags as valid JSX intrinsics so the
 // wrapper components in this package can render them at all. Their
 // goban-web attributes are kebab-case strings that don't map cleanly onto
 // React's camelCase JSX prop convention, so they're set imperatively (see
@@ -32,6 +32,10 @@ declare module "react" {
       "go-board-controls": import("react").DetailedHTMLProps<
         import("react").HTMLAttributes<import("goban-web").GoBoardControlsElement>,
         import("goban-web").GoBoardControlsElement
+      >;
+      "goban-wrapper": import("react").DetailedHTMLProps<
+        import("react").HTMLAttributes<import("goban-web").GobanWrapperElement>,
+        import("goban-web").GobanWrapperElement
       >;
     }
   }

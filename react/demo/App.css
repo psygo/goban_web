@@ -51,6 +51,18 @@ h2 {
   cursor: default;
 }
 
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+}
+
+.replay-panel {
+  padding: 1.5rem;
+  border-radius: 12px;
+}
+
 .log {
   width: 100%;
   max-width: 480px;

@@ -41,6 +41,8 @@ export interface GoBoardProps {
   labelFontSize?: string;
   cornerRadius?: string;
   theme?: string;
+  /** Draws each stone's move number on top of it. Default off (unlike most boolean props here, `false`/omitted means off). */
+  moveNumbers?: boolean;
   id?: string;
   className?: string;
   style?: CSSProperties;
@@ -86,6 +88,7 @@ export const GoBoard = forwardRef<GoBoardElement, GoBoardProps>(function GoBoard
     labelFontSize,
     cornerRadius,
     theme,
+    moveNumbers,
     onMove,
     onIllegalMove,
     onPass,
@@ -125,6 +128,7 @@ export const GoBoard = forwardRef<GoBoardElement, GoBoardProps>(function GoBoard
     "label-font-size": labelFontSize,
     "corner-radius": cornerRadius,
     theme,
+    "move-numbers": moveNumbers,
   });
 
   useCustomEvent<MoveEventDetail>(ref, "move", onMove);

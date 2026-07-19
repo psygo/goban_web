@@ -130,7 +130,10 @@ interface GoBoardTheme {
    * at real image files (see `public/assets/themes/`), so using one of
    * these theme presets outside this project's own demo requires hosting
    * copies of those files at matching paths (or just setting the
-   * corresponding attribute directly instead).
+   * corresponding attribute directly instead). `npm run release` copies
+   * every theme asset into each published package's own `dist/`, so
+   * they're always available to copy from there — see "Release process"
+   * in Docs.md.
    */
   boardImage?: string;
   blackStoneImage?: string;
@@ -466,6 +469,15 @@ function normalizeKeyBinding(value: string | string[] | undefined): string[] | u
  *     `black-stone`/`white-stone`/`background-image` still override the
  *     theme's stone/board appearance when set, same as before themes
  *     existed. An unrecognized value falls back to `"wood"`.
+ *   - `move-numbers` (boolean, default *off* — unlike most boolean
+ *     attributes here, presence turns it *on*: `move-numbers` or
+ *     `move-numbers="true"`) — draws each stone's move number on top of
+ *     it. Numbers come from however the stone got there: `play()` calls
+ *     count up from 1, and stepping through a loaded `sgf` numbers stones
+ *     by their position in the main line (`nextMove()`/`goToMove()`/...).
+ *     Setup stones (SGF `AB`/`AW`) are never numbered. A captured stone's
+ *     number is discarded with it — if another stone is later played on
+ *     the same point, only the newer number shows, same as any kifu.
  *
  * Keyboard navigation: with an `sgf` loaded, ArrowRight/ArrowLeft step
  * `nextMove()`/`previousMove()` whenever focus is anywhere inside the
@@ -508,6 +520,7 @@ export class GoBoardElement extends HTMLElement {
       "label-font-size",
       "corner-radius",
       "theme",
+      "move-numbers",
     ];
   }
 
@@ -523,6 +536,15 @@ export class GoBoardElement extends HTMLElement {
   private _sgfMainLine: SGFNode[] | null = null;
   private _moveIndex = 0;
   private sgfLoadToken = 0;
+  // Parallel to `_board`'s grid (same `y * size + x` indexing): the move
+  // number of the stone currently sitting at each point, or `null` for an
+  // empty point, a setup stone (AB/AW never gets a number), or a point
+  // whose numbered stone was since captured. Rebuilt from scratch whenever
+  // `_board` itself is replaced (see `resetMoveNumbers`), since a stale
+  // entry from a previous board would otherwise outlive the stone it
+  // described.
+  private moveNumbers: (number | null)[] = [];
+  private moveCounter = 0;
   private _keyBindings: Record<GoBoardKeyAction, string[]> = {
     next: [...DEFAULT_KEY_BINDINGS.next],
     previous: [...DEFAULT_KEY_BINDINGS.previous],
@@ -532,6 +554,7 @@ export class GoBoardElement extends HTMLElement {
   constructor() {
     super();
     this._board = new Board(this.sizeAttr);
+    this.resetMoveNumbers(this.sizeAttr);
     this.attachShadow({ mode: "open" });
   }
 
@@ -574,6 +597,7 @@ export class GoBoardElement extends HTMLElement {
     if (!this.isConnected) return;
     if (name === "size") {
       this._board = new Board(this.sizeAttr);
+      this.resetMoveNumbers(this.sizeAttr);
       this.hovered = null;
       this.buildSvg();
     } else if (name === "sgf") {
@@ -643,6 +667,16 @@ export class GoBoardElement extends HTMLElement {
     );
   }
 
+  /**
+   * Whether move numbers are drawn on top of stones, per the
+   * `move-numbers` attribute. Unlike `interactive`/`coordinates`/etc.,
+   * this defaults to *off* — presence (not absence) of `"false"`
+   * — since numbering every stone isn't the look most boards want.
+   */
+  get moveNumbersEnabled(): boolean {
+    return this.hasAttribute("move-numbers") && this.getAttribute("move-numbers") !== "false";
+  }
+
   /** Current key-to-action bindings for arrow-key SGF navigation. */
   get keyBindings(): Readonly<Record<GoBoardKeyAction, string[]>> {
     return this._keyBindings;
@@ -665,6 +699,16 @@ export class GoBoardElement extends HTMLElement {
   private get sizeAttr(): number {
     const value = Number(this.getAttribute("size"));
     return Number.isInteger(value) && value > 1 ? value : 19;
+  }
+
+  /** Discards move-number tracking and starts counting from 1 again — call whenever `_board` itself is replaced. */
+  private resetMoveNumbers(size: number): void {
+    this.moveNumbers = new Array(size * size).fill(null);
+    this.moveCounter = 0;
+  }
+
+  private moveNumberIndex(x: number, y: number): number {
+    return y * this._board.size + x;
   }
 
   /** Which sides currently get coordinate labels, per the `coordinates` attribute. */
@@ -899,6 +943,11 @@ export class GoBoardElement extends HTMLElement {
   play(x: number, y: number): boolean {
     const result = this._board.play(x, y);
     if (result.legal) {
+      this.moveCounter++;
+      this.moveNumbers[this.moveNumberIndex(x, y)] = this.moveCounter;
+      for (const captured of result.captured) {
+        this.moveNumbers[this.moveNumberIndex(captured.x, captured.y)] = null;
+      }
       this.render();
       this.dispatchEvent(
         new CustomEvent<MoveEventDetail>("move", {
@@ -922,6 +971,11 @@ export class GoBoardElement extends HTMLElement {
   /** Passes the current player's turn. */
   pass(): void {
     this._board.pass();
+    // A pass still consumes a move number — matches the SGF main line's
+    // own indexing (see `goToMove`), where a pass node is one entry like
+    // any other, so a stone played right after one keeps the number it
+    // would have had if replayed from an SGF.
+    this.moveCounter++;
     this.render();
     this.dispatchEvent(new CustomEvent("pass", { bubbles: true, composed: true }));
   }
@@ -929,6 +983,7 @@ export class GoBoardElement extends HTMLElement {
   /** Clears the board, optionally resizing it. Does not affect a loaded SGF. */
   reset(size: number = this._board.size): void {
     this._board = new Board(size);
+    this.resetMoveNumbers(size);
     this.hovered = null;
     this.buildSvg();
     this.render();
@@ -956,13 +1011,15 @@ export class GoBoardElement extends HTMLElement {
 
     const size = this._board.size;
     this._board = new Board(size);
+    this.resetMoveNumbers(size);
     // The root node (`nodes[0]`) is excluded from `_sgfMainLine` (see
     // `loadSgf`) but can itself carry setup stones (AB/AW/AE) — a
     // single-node "diagram" SGF with no actual moves is nothing *but*
     // that. Always apply it first so that setup isn't silently dropped.
     this.applySgfNode(this._sgfTree!.nodes[0]!);
     for (let i = 0; i < clamped; i++) {
-      this.applySgfNode(this._sgfMainLine[i]!);
+      // 1-indexed: node 0 in the main line is move 1.
+      this.applySgfNode(this._sgfMainLine[i]!, i + 1);
     }
     this._moveIndex = clamped;
     this.hovered = null;
@@ -982,8 +1039,13 @@ export class GoBoardElement extends HTMLElement {
    * ko rules, per the SGF spec) followed by a move (`B`/`W`, played via
    * `Board.play`), if present. A node commonly has only one or the other,
    * but both are handled since the spec permits either independently.
+   *
+   * `moveNumber`, when given, is recorded for a played stone (never for
+   * setup stones, which the SGF spec and move-numbering convention both
+   * treat as pre-existing rather than "played") — omit it for the root
+   * node, which isn't itself a numbered move in `_sgfMainLine`'s indexing.
    */
-  private applySgfNode(node: SGFNode): void {
+  private applySgfNode(node: SGFNode, moveNumber?: number): void {
     for (const { x, y } of sgfPointsForProperty(node, "AB")) this._board.set(x, y, Color.Black);
     for (const { x, y } of sgfPointsForProperty(node, "AW")) this._board.set(x, y, Color.White);
     for (const { x, y } of sgfPointsForProperty(node, "AE")) this._board.set(x, y, Color.Empty);
@@ -999,7 +1061,14 @@ export class GoBoardElement extends HTMLElement {
     }
     const vertex = sgfPointToVertex(value);
     if (!vertex) return;
-    this._board.play(vertex.x, vertex.y);
+    const result = this._board.play(vertex.x, vertex.y);
+    if (!result.legal) return;
+    if (moveNumber !== undefined) {
+      this.moveNumbers[this.moveNumberIndex(vertex.x, vertex.y)] = moveNumber;
+    }
+    for (const captured of result.captured) {
+      this.moveNumbers[this.moveNumberIndex(captured.x, captured.y)] = null;
+    }
   }
 
   private async loadSgf(url: string): Promise<void> {
@@ -1024,6 +1093,7 @@ export class GoBoardElement extends HTMLElement {
       // stones (AB/AW/AE) that must be applied before the first render —
       // a single-node "diagram" SGF is nothing but that.
       this._board = new Board(size);
+      this.resetMoveNumbers(size);
       this.hovered = null;
       this.applySgfNode(root);
       this.buildSvg();
@@ -1320,11 +1390,16 @@ export class GoBoardElement extends HTMLElement {
     this.stonesGroup.replaceChildren();
     const layout = this.computeLayout();
     const { xStart, xEnd, yStart, yEnd, gridOffsetX, gridOffsetY } = layout;
+    const showMoveNumbers = this.moveNumbersEnabled;
     for (let y = yStart; y <= yEnd; y++) {
       for (let x = xStart; x <= xEnd; x++) {
         const color = this._board.get(x, y);
         if (color === Color.Empty) continue;
         this.stonesGroup.appendChild(this.createStone(x, y, color, gridOffsetX, gridOffsetY));
+        const moveNumber = showMoveNumbers ? this.moveNumbers[this.moveNumberIndex(x, y)] : null;
+        if (moveNumber != null) {
+          this.stonesGroup.appendChild(this.createMoveNumber(moveNumber, x, y, gridOffsetX, gridOffsetY));
+        }
       }
     }
     this.renderMarkup(layout);
@@ -1476,6 +1551,23 @@ export class GoBoardElement extends HTMLElement {
     return el;
   }
 
+  /** Draws a move number centered on the stone already at `x`/`y` — see `move-numbers` in the class doc. */
+  private createMoveNumber(
+    number: number,
+    x: number,
+    y: number,
+    gridOffsetX: number,
+    gridOffsetY: number,
+  ): SVGTextElement {
+    const el = document.createElementNS(SVG_NS, "text") as SVGTextElement;
+    el.setAttribute("x", String(gridOffsetX + x));
+    el.setAttribute("y", String(gridOffsetY + y));
+    el.setAttribute("class", "move-number");
+    el.setAttribute("fill", this.markColorAt(x, y));
+    el.textContent = String(number);
+    return el;
+  }
+
   /** `black-stone`/`white-stone` attribute, falling back to the active theme's own stone image if it has one. */
   private stoneImageUrl(color: Color): string | null {
     const attr = color === Color.Black ? "black-stone" : "white-stone";
@@ -1599,6 +1691,14 @@ function buildStyles(theme: GoBoardTheme): string {
      * true visual center under "middle", which reads as text sitting too
      * high. "central" lines up with the glyph's actual vertical middle. */
     dominant-baseline: central;
+  }
+  .move-number {
+    font-family: var(--go-label-font-family, system-ui, sans-serif);
+    font-size: var(--go-label-font-size, 0.55px);
+    font-weight: 600;
+    text-anchor: middle;
+    dominant-baseline: central;
+    pointer-events: none;
   }
 `;
 }

@@ -2,19 +2,21 @@
 
 ## Component architecture
 
-The board is composed from four custom elements, meant to be used
+The board is composed from five custom elements, meant to be used
 together but each independently usable:
 
 ```html
-<go-board-container>
-  <go-metadata-container></go-metadata-container>
-  <go-board-controls></go-board-controls>
-  <go-board
-    sgf="/assets/game.sgf"
-    black-stone="/assets/black-stone.svg"
-    white-stone="/assets/white-stone.svg"
-  ></go-board>
-</go-board-container>
+<goban-wrapper>
+  <go-board-container>
+    <go-metadata-container></go-metadata-container>
+    <go-board-controls></go-board-controls>
+    <go-board
+      sgf="/assets/game.sgf"
+      black-stone="/assets/black-stone.svg"
+      white-stone="/assets/white-stone.svg"
+    ></go-board>
+  </go-board-container>
+</goban-wrapper>
 ```
 
 - `<go-board>` — owns all state: the rules engine, SGF loading/parsing,
@@ -27,6 +29,12 @@ together but each independently usable:
   inside the closest `go-board-container` ancestor, falling back to the
   first `go-board` in the document) and talks to it exclusively through
   its public API and events — never through the container.
+- `<goban-wrapper>` — optional, purely a theming scope (also
+  `display: contents`, no layout of its own): its `color-scheme`
+  attribute forces light/dark on `<go-metadata-container>`/
+  `<go-board-controls>` regardless of the OS setting. See "Theming"
+  below. Skip it entirely and everything still follows
+  `prefers-color-scheme` automatically, same as before it existed.
 
 This means `<go-board>` is fully usable standalone (as in the earlier
 single-element usage below), and the peripherals can be swapped out or
@@ -108,9 +116,23 @@ and steps through an SGF game record.
 - `width` / `height` — CSS length for the rendered size (bare numbers
   are treated as px, e.g. `width="480"`). Unset defaults to 100% width
   with a 1:1 aspect ratio (the previous, only, behavior); setting just
-  one of the two renders a square board at that size; setting both
-  renders that exact box (the SVG content still stays square-celled,
-  letterboxed within it).
+  one of the two renders a square board at that size, deriving the
+  other from the board's own aspect ratio (so a non-square crop, see
+  `x-start`/`x-end`/`y-start`/`y-end` above, doesn't get stretched);
+  setting both renders that exact box (the SVG content still stays
+  square-celled, letterboxed within it).
+
+  For a resizable board — a size slider, a responsive layout, ... — set
+  only `width` (never both) and add `max-width: 100%` in CSS: `width`
+  alone is still a fixed length, not a percentage, so without
+  `max-width` it'll overflow a viewport/container narrower than
+  whatever it's set to. `<go-board-container>` needs the same
+  `max-width: 100%` (it otherwise just shrink-wraps `<go-board>`'s
+  width with no cap of its own); `<go-metadata-container>`/
+  `<go-board-controls>` need no such rule — they already stretch to
+  match `<go-board-container>`'s width via its default flex
+  `align-items: stretch`. `index.html`'s demo has a live example (a
+  width slider above the board) built exactly this way.
 - `background-image` — image URL to render behind the grid, replacing
   the default wood gradient. Stretched to exactly fill the board's own
   box (not cropped-to-cover) — deliberate, since crop-to-cover of a
@@ -147,6 +169,13 @@ and steps through an SGF game record.
   get a line cut through it. Purely cosmetic — never moves the point
   actually being labeled, just where its text is drawn.
 - `theme` — a built-in color/appearance preset, see "Themes" below.
+- `move-numbers` — boolean, default *off*. Unlike the other boolean
+  attributes above, presence (not `"false"`) turns it *on*:
+  `move-numbers` or `move-numbers="true"`. Draws each stone's move
+  number on top of it — `play()` counts up from 1, and stepping
+  through a loaded `sgf` numbers stones by position in the main line.
+  Setup stones (`AB`/`AW`) are never numbered, and a captured stone's
+  number is discarded with it, same as any kifu.
 
 The board's own box (not just its internal SVG content) picks up a
 matching `border-radius` and `overflow: hidden` whenever it's rounded,
@@ -362,6 +391,17 @@ Pure layout — a `<slot>` inside a flex-column `:host`. No JavaScript
 behavior beyond that. Not required; `<go-board>` and the peripherals
 below work without it, just with a less convenient "nearest board in
 the document" fallback for discovery.
+
+## `<goban-wrapper>`
+
+Pure theming scope — a `<slot>` inside a `display: contents` `:host`,
+plus CSS rules keyed off its own `color-scheme` attribute. No
+JavaScript behavior at all. Not required; every component follows
+`prefers-color-scheme` on its own without it. See "Theming" below for
+what `color-scheme="dark"` / `"light"` actually override and why
+you'd want it (mainly: a page-JS-driven theme toggle, which
+`prefers-color-scheme` alone can't support since it only reflects the
+OS/browser setting).
 
 ## `<go-metadata-container>`
 
@@ -594,19 +634,42 @@ Each component exposes its colors as internal CSS custom properties
 (dark values as the default, overridden under `prefers-color-scheme:
 light`), and each of those is itself written as `var(--goban-x,
 internal-value)` — so setting a `--goban-*` property anywhere *outside*
-the component (e.g. on `:root`) overrides its value, since custom
-properties inherit through shadow DOM boundaries. This is what makes a
-manual, JS-driven theme toggle possible: `prefers-color-scheme` alone
-reflects the OS/browser setting and can't be flipped from page script,
-but a page can force a theme by setting the full `--goban-*` layer on
-`:root[data-theme="dark"]` / `:root[data-theme="light"]` and toggling
-that attribute — exactly what the demo's top-right sun/moon button
-does (see `index.html`; it also persists the choice to
-`localStorage`). No `data-theme` attribute means "follow the OS", same
-as the zero-setup default.
+the component (e.g. on an ancestor) overrides its value, since custom
+properties inherit through shadow DOM boundaries.
 
-The shared `--goban-*` property names (set them on `:root`, or on the
-component itself for a narrower override): `--goban-text`,
+`prefers-color-scheme` alone reflects the OS/browser setting and can't
+be flipped from page script — for a manual, JS-driven theme toggle,
+wrap the components in `<goban-wrapper color-scheme="dark">` (or
+`"light"`) instead. It sets the full `--goban-*` layer for exactly
+those two states on itself (`display: contents`, so it adds no layout
+of its own), which every descendant then inherits:
+
+```html
+<goban-wrapper id="goban-theme">
+  <go-board-container>
+    <go-metadata-container></go-metadata-container>
+    <go-board sgf="..."></go-board>
+    <go-board-controls></go-board-controls>
+  </go-board-container>
+</goban-wrapper>
+
+<script>
+  // however your own toggle button decides light vs. dark:
+  document.getElementById("goban-theme").setAttribute("color-scheme", "dark");
+</script>
+```
+
+No `color-scheme` attribute (the default) means "follow the OS", same
+as the zero-setup default — exactly what the demo's top-right sun/moon
+button does (see `index.html`; it also persists the choice to
+`localStorage`, and separately toggles its *own* page background via a
+plain `:root[data-theme]` rule, which is page-level styling with
+nothing to do with `<goban-wrapper>`).
+
+Setting the `--goban-*` properties yourself (on `:root`, or on any
+ancestor) still works too, for a narrower override than `goban-wrapper`
+gives you — e.g. overriding just one color regardless of scheme. The
+shared property names: `--goban-text`,
 `--goban-text-secondary`, `--goban-text-muted`, `--goban-comment`,
 `--goban-panel-bg` (shared by both player panels — see below),
 `--goban-panel-border`, `--goban-panel-shadow`, `--goban-card-bg`, `--goban-card-border`,
@@ -759,6 +822,30 @@ Static files referenced at runtime (via `fetch`, e.g. the `sgf`,
 under `public/` — Vite copies that directory as-is to the build output
 root and serves it unprocessed in dev. The demo's sample game, stone
 images, and board background live in `public/assets/`.
+
+### Release process
+
+```sh
+npm run release
+```
+
+Runs `scripts/release.mjs`: builds `goban-web` (`npm run build` +
+`npm test`) and `goban-web-react` (`build` + `build:demo`), then
+assembles both packages' `dist/` output into a top-level `release/`
+folder — `release/goban-web/` and `release/goban-web-react/`, each
+exactly what `npm publish` would ship for that package, plus a
+`release/README.md` with a copy-paste usage snippet for each. This is
+the easiest way to get a working copy of both the plain/HTML version
+and the React version without needing either package actually
+published to npm first — copy either folder wholesale into a project.
+
+It also prints an inventory of every image-based theme's asset files
+(see "Themes" above) found under `release/goban-web/assets/themes/`,
+as a release-time check that they actually made it into the build
+output (they get there via Vite's plain `public/` → `dist/` copy, same
+mechanism as the demo's own sample SGF/images — nothing themes-specific
+about it, but easy to silently break by moving files around without
+noticing). `release/` is gitignored, like `dist/`/`dist-demo/`.
 
 ## Status
 

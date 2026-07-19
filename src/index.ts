@@ -36,6 +36,7 @@ export { GoBoardContainerElement } from "./elements/go-board-container-element";
 export { GoMetadataContainerElement } from "./elements/go-metadata-container-element";
 export type { GoGameInfo, GoPlayerInfo } from "./elements/go-metadata-container-element";
 export { GoBoardControlsElement } from "./elements/go-board-controls-element";
+export { GobanWrapperElement } from "./elements/goban-wrapper-element";
 
 declare global {
   interface HTMLElementTagNameMap {
@@ -43,5 +44,6 @@ declare global {
     "go-board-container": import("./elements/go-board-container-element").GoBoardContainerElement;
     "go-metadata-container": import("./elements/go-metadata-container-element").GoMetadataContainerElement;
     "go-board-controls": import("./elements/go-board-controls-element").GoBoardControlsElement;
+    "goban-wrapper": import("./elements/goban-wrapper-element").GobanWrapperElement;
   }
 }

@@ -20,7 +20,8 @@
     "build": "tsc -p tsconfig.build.json && vite build && vite build --config vite.demo.config.ts",
     "preview": "vite preview --config vite.demo.config.ts",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "release": "node scripts/release.mjs"
   },
   "devDependencies": {
     "jsdom": "^25.0.1",

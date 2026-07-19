@@ -13,6 +13,8 @@ export { GoMetadataContainer } from "./GoMetadataContainer";
 export type { GoMetadataContainerProps } from "./GoMetadataContainer";
 export { GoBoardControls } from "./GoBoardControls";
 export type { GoBoardControlsProps } from "./GoBoardControls";
+export { GobanWrapper } from "./GobanWrapper";
+export type { GobanWrapperProps } from "./GobanWrapper";
 
 // Re-exported for convenience, so consumers of this package don't also
 // need a direct dependency on goban-web just to name these types/values.
@@ -22,6 +24,7 @@ export type {
   GoBoardElement,
   GoBoardControlsElement,
   GoBoardContainerElement,
+  GobanWrapperElement,
   GoGameInfo,
   GoMetadataContainerElement,
   GoPlayerInfo,

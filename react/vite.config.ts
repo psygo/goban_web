@@ -9,12 +9,15 @@ export default defineConfig({
     emptyOutDir: false,
     lib: {
       entry: "src/index.ts",
-      name: "GobanWeb",
-      fileName: () => "goban-web.js",
+      name: "GobanWebReact",
+      fileName: () => "goban-web-react.js",
       formats: ["es"],
     },
-  },
-  test: {
-    environment: "jsdom",
+    rollupOptions: {
+      // react/react-dom/goban-web are peer dependencies, supplied by
+      // whatever app consumes this package — bundling them would risk a
+      // second React copy alongside the consumer's own.
+      external: ["react", "react-dom", "react/jsx-runtime", "goban-web"],
+    },
   },
 });

@@ -285,6 +285,29 @@ const THEMES: Record<string, GoBoardTheme> = {
     blackStoneImage: "/assets/themes/battsgo/black_stone.png",
     whiteStoneImage: "/assets/themes/battsgo/white_stone.png",
   },
+  // WGo.js's default board look (waltheri/wgo.js) — photographed stones
+  // on a saturated orange-brown board. The board itself is a hand-tuned
+  // gradient rather than a copy of WGo.js's own board photo (its JPEG
+  // carries a separate third-party photo credit in its comment field,
+  // unlike the stone photos); see NOTICE.md.
+  wgojs: {
+    boardFill: "url(#wgojs-wood)",
+    gridStroke: "#654525",
+    starFill: "#553311",
+    coordText: "#553311",
+    blackStoneFill: "#0e0e0e",
+    blackStoneStroke: "#000000",
+    whiteStoneFill: "#ebebeb",
+    whiteStoneStroke: "#c9c3b3",
+    stoneStrokeWidth: 0.02,
+    markLight: "#eeeeee",
+    markDark: "#553311",
+    stoneShadow: true,
+    stoneShadowColor: "#3e2020",
+    stoneShadowOpacity: 0.5,
+    blackStoneImage: "/assets/themes/wgojs/black.png",
+    whiteStoneImage: "/assets/themes/wgojs/white.png",
+  },
 };
 const DEFAULT_THEME = "wood";
 
@@ -435,9 +458,11 @@ function normalizeKeyBinding(value: string | string[] | undefined): string[] | u
  *     soft drop shadow — modeled on Go Magic's Sabaki-inspired board), or
  *     five themes ported from Sabaki's theme directory —
  *     `"photorealistic"`, `"happy-stones"`, `"hikaru"`, `"baduktv"`, and
- *     `"battsgo"` — which use real image assets under
- *     `public/assets/themes/` (see "Themes" in Docs.md for what each
- *     looks like and what hosting them elsewhere requires).
+ *     `"battsgo"` — or `"wgojs"` (WGo.js's default look — photographed
+ *     stones on a saturated orange-brown board) — all six of which use
+ *     real image assets under `public/assets/themes/` (see "Themes" in
+ *     Docs.md for what each looks like and what hosting them elsewhere
+ *     requires).
  *     `black-stone`/`white-stone`/`background-image` still override the
  *     theme's stone/board appearance when set, same as before themes
  *     existed. An unrecognized value falls back to `"wood"`.
@@ -1193,6 +1218,10 @@ export class GoBoardElement extends HTMLElement {
           <radialGradient id="gomagic-wood" cx="35%" cy="30%" r="75%">
             <stop offset="0%" stop-color="#eec97a" />
             <stop offset="100%" stop-color="#c9963f" />
+          </radialGradient>
+          <radialGradient id="wgojs-wood" cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stop-color="#e3ab52" />
+            <stop offset="100%" stop-color="#a8721f" />
           </radialGradient>
           <filter id="stone-shadow" x="-50%" y="-50%" width="200%" height="200%">
             <feDropShadow

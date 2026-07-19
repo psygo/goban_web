@@ -20,3 +20,22 @@ These are third-party Sabaki theme assets, repackaged here for use with
   by JJScott, a fan theme based on the BattsGo Twitch channel's chat
   emotes. No explicit license file, but the repository's sole purpose is
   distributing this theme for installation into Sabaki. Used as-is.
+
+- **`wgojs/`** — the two default stone photos (`black.png`, renamed
+  from `black00_128.png`; `white.png`, from `white00_128.png`) from
+  [waltheri/wgo.js](https://github.com/waltheri/wgo.js) by Jan Prokop.
+  No LICENSE file in the repo, but the same project is published to npm
+  as `wgo` with `"license": "MIT"` in its `package.json`. Used as-is —
+  WGo.js ships several photo variants per color for visual variety
+  (`black00`-`black03`, `white00`-`white10`); only one of each is used
+  here, since this project renders a single fixed image per color
+  rather than picking randomly per stone.
+
+  WGo.js's own board background (`wood_1024.jpg`) is **not** included
+  here: unlike the stone photos, its JPEG comment field credits a
+  separate photographer ("github.com/atarnowsky") for the image,
+  suggesting different/uncertain terms from the rest of the repo. The
+  `"wgojs"` theme instead uses a hand-authored SVG gradient tuned to
+  the same saturated orange-brown tone (sampled from the original for
+  color accuracy only, not copied) — the same approach this project's
+  own default `"wood"` theme already uses.

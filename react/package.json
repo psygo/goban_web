@@ -1,0 +1,39 @@
+{
+  "name": "goban-web-react",
+  "version": "0.1.0",
+  "description": "React wrapper components for goban-web's Web Components.",
+  "type": "module",
+  "main": "dist/goban-web-react.js",
+  "module": "dist/goban-web-react.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/goban-web-react.js"
+    }
+  },
+  "scripts": {
+    "dev": "vite --config vite.demo.config.ts",
+    "build": "tsc -p tsconfig.build.json && vite build",
+    "build:demo": "vite build --config vite.demo.config.ts",
+    "preview": "vite preview --config vite.demo.config.ts"
+  },
+  "peerDependencies": {
+    "goban-web": "*",
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.7.0",
+    "goban-web": "file:..",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.8"
+  }
+}

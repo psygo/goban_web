@@ -191,6 +191,11 @@ rather than flat colors or gradients:
 - `"battsgo"` — a fan theme using Twitch chat emotes as stones on a
   redwood board with gold ink
   ([JJscott/BattsGo](https://github.com/JJscott/BattsGo)).
+- `"wgojs"` — [WGo.js](https://github.com/waltheri/wgo.js)'s default
+  board look: photographed stones (one of its several black/white
+  photo variants) on a saturated orange-brown board. The board itself
+  is a hand-tuned gradient rather than a copy of WGo.js's own board
+  photo — see `public/assets/themes/NOTICE.md` for why.
 
 An unrecognized `theme` value falls back to `"wood"`.
 `black-stone`/`white-stone`/`background-image` still override the
@@ -200,7 +205,7 @@ before `theme` existed. Markup contrast coloring (light-on-black-stone,
 dark-on-white-stone-or-empty — see "SGF setup stones and markup"
 below) also follows the active theme.
 
-The five image-based themes above point at files under
+The six image-based themes above point at files under
 `public/assets/themes/<theme>/` (with source/license notes in
 `public/assets/themes/NOTICE.md`) — that's how they resolve inside
 *this* project's own demo. Using one of them outside this project
@@ -678,14 +683,75 @@ Not yet implemented: variation navigation, SGF serialization/writing,
 and property-specific typed accessors (e.g. reading `SZ`/`KM`/`RE` as
 typed values rather than raw strings).
 
+## Usage from React
+
+goban-web itself stays dependency-free — it doesn't know React exists.
+React support instead lives in a separate package, **`react/`**
+(`goban-web-react`), which is a thin set of wrapper components around
+the Custom Elements. It has its own `package.json`, its own
+`node_modules`, and its own React/react-dom dependency — none of that
+leaks into the main package's build or bundle size.
+
+```tsx
+import { GoBoard } from "goban-web-react";
+
+<GoBoard size={19} theme="wood" onMove={({ x, y, color }) => { /* ... */ }} />;
+```
+
+`GoBoard`, `GoBoardContainer`, `GoMetadataContainer`, and
+`GoBoardControls` wrap the four Custom Elements one-to-one:
+
+- **Attributes become camelCase props** (`blackStone`, `cornerRadius`,
+  `labelOffsetX`, ...) instead of the kebab-case HTML attribute names —
+  see `react/src/GoBoard.tsx` for the full prop list, or Docs.md's
+  "Attributes" section above for what each one does (the mapping is
+  1:1).
+- **Custom events become on-props** — `onMove`, `onIllegalMove`,
+  `onPass`, `onSgfLoaded`, `onSgfError`, `onNavigate` on `<GoBoard>`,
+  `onMetadataChanged` on `<GoMetadataContainer>` — wired internally via
+  `addEventListener`/`removeEventListener` in a `useEffect`, so from the
+  outside they behave like any other React event prop.
+- **`ref` gives you the real Custom Element**, e.g. `GoBoardElement`, so
+  imperative methods (`play()`, `pass()`, `reset()`, `nextMove()`, ...)
+  and read-only state (`board.moveIndex`, `board.board.currentColor`,
+  ...) are called directly off it — the wrapper doesn't invent a
+  separate imperative API.
+
+`react/demo/` (backed by `App.tsx`, `main.tsx`) is a complete, runnable
+example: an interactive board built from `<GoBoard>` alone, plus a
+second section composing all four wrapper components —
+`<GoBoardContainer>`, `<GoMetadataContainer>`, `<GoBoard sgf="...">`,
+`<GoBoardControls>` — to replay a loaded game. See "Development" below
+for how to run it.
+
+If you're wrapping a Custom Element in React yourself (goban-web's or
+anyone else's) and want to understand the underlying mechanics instead
+of just using this package, `react/src/jsx.ts` and
+`react/src/internal/` are worth reading directly: the JSX-typing
+augmentation (and why React 19 needs `declare module "react"` rather
+than the classic `declare global { namespace JSX { ... } } }` form),
+and the small `useAttributes`/`useCustomEvent` hooks the wrapper
+components are built from.
+
 ## Development
 
 ```sh
 npm install
 npm run dev      # dev server with a demo page at index.html
 npm test         # run unit tests (Vitest)
-npm run build    # type-check + build the library and demo to dist/ and dist-demo/
+npm run build    # type-check + build the library and its demo to dist/ and dist-demo/
 npm run preview  # serve the built demo from dist-demo/
+```
+
+The React wrapper package lives in `react/` and is developed
+independently — see "Usage from React" above for what it contains:
+
+```sh
+cd react
+npm install      # separate node_modules; depends on goban-web via
+                 # "file:.." (this repo) rather than a published version
+npm run dev      # dev server for react/demo
+npm run build    # type-check + build the package to react/dist/
 ```
 
 Static files referenced at runtime (via `fetch`, e.g. the `sgf`,
